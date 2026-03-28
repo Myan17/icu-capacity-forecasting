@@ -1,0 +1,303 @@
+:root {
+    font-family: Inter, Arial, sans-serif;
+    color: #111827;
+    background: #f3f4f6;
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    background: #f3f4f6;
+  }
+  
+  button,
+  select {
+    font: inherit;
+  }
+  
+  .app-shell {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 100vh;
+  }
+  
+  .sidebar {
+    background: #111827;
+    color: white;
+    padding: 24px 16px;
+  }
+  
+  .sidebar-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+  
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .nav-item {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: transparent;
+    color: white;
+    text-decoration: none;
+    display: block;
+  }
+  
+  .nav-item.active {
+    background: #1f2937;
+  }
+  
+  .nav-item.disabled {
+    opacity: 0.5;
+  }
+  
+  .main-content {
+    padding: 24px;
+  }
+  
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    gap: 16px;
+  }
+  
+  .topbar-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  
+  .topbar-subtitle {
+    color: #6b7280;
+    margin-top: 4px;
+  }
+  
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topbar-last-updated {
+    color: #6b7280;
+    margin-top: 6px;
+    font-size: 0.95rem;
+  }
+  
+  .topbar-hospital {
+    padding: 10px 14px;
+    background: white;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .primary-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 16px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+  }
+  
+  .primary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  .page-controls {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 20px;
+  }
+  
+  .hospital-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .hospital-selector select {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: white;
+  }
+  
+  .card {
+    background: white;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  
+  .status-banner {
+    border-radius: 18px;
+    padding: 18px;
+    margin-bottom: 20px;
+    color: white;
+  }
+  
+  .status-title {
+    font-size: 0.95rem;
+    opacity: 0.9;
+  }
+  
+  .status-main {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-top: 6px;
+  }
+  
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  
+  .kpi-card {
+    min-height: 110px;
+  }
+  
+  .kpi-label {
+    color: #6b7280;
+    font-size: 0.95rem;
+  }
+  
+  .kpi-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-top: 10px;
+  }
+  
+  .kpi-subtext {
+    margin-top: 8px;
+    color: #6b7280;
+  }
+  
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+  }
+  
+  .section-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  
+  .chart-wrapper {
+    width: 100%;
+    height: 320px;
+  }
+  
+  .chart-note {
+    margin-top: 10px;
+    color: #6b7280;
+    font-size: 0.92rem;
+  }
+  
+  .alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .alert-item {
+    display: flex;
+    gap: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+  }
+  
+  .alert-badge {
+    min-width: 72px;
+    text-align: center;
+    padding: 8px 10px;
+    border-radius: 999px;
+    color: white;
+    font-weight: 700;
+    height: fit-content;
+  }
+  
+  .alert-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .alert-message {
+    font-weight: 600;
+  }
+  
+  .alert-meta {
+    color: #6b7280;
+    font-size: 0.9rem;
+  }
+  
+  .state-box {
+    background: white;
+    border-radius: 18px;
+    padding: 24px;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .error-state {
+    color: #b91c1c;
+  }
+  
+  .risk-red {
+    background: #dc2626;
+  }
+  
+  .risk-yellow {
+    background: #d97706;
+  }
+  
+  .risk-green {
+    background: #16a34a;
+  }
+  
+  .risk-neutral {
+    background: #6b7280;
+  }
+  
+  @media (max-width: 1100px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    .kpi-grid {
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+  }
+  
+  @media (max-width: 800px) {
+    .app-shell {
+      grid-template-columns: 1fr;
+    }
+  
+    .sidebar {
+      display: none;
+    }
+  
+    .topbar {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+  }
