@@ -65,6 +65,11 @@ def run_forecast(hospital_id: str, db: Session = Depends(get_db)):
     latest_capacity = int(df["icu_capacity"].iloc[-1])
     start_time = datetime.utcnow()
 
+    # Delete old forecast + alert rows for this hospital before inserting new ones
+    db.query(Forecast).filter(Forecast.hospital_id == hospital_id).delete()
+    db.query(Alert).filter(Alert.hospital_id == hospital_id).delete()
+    db.commit()
+
     created = []
     for i, pred in enumerate(preds):
         forecast_time = start_time + timedelta(hours=i + 1)
@@ -77,6 +82,7 @@ def run_forecast(hospital_id: str, db: Session = Depends(get_db)):
             risk_level=risk_level,
         )
         db.add(forecast_row)
+
         created.append(
             {
                 "forecast_time": forecast_time.isoformat(),
