@@ -1,0 +1,48 @@
+{
+  "hospital_id": "HOSPITAL_A",
+  "input_path": "ml/data/raw/sample_hospital_a.csv",
+  "evaluation_horizon": 9,
+  "cleaning_summary": {
+    "input_rows": 48,
+    "output_rows": 48,
+    "dropped_missing_timestamp": 0,
+    "dropped_missing_target": 0,
+    "dropped_missing_hospital_id": 0,
+    "dropped_invalid_capacity": 0,
+    "dropped_negative_target": 0,
+    "dropped_target_exceeds_capacity": 0,
+    "duplicate_rows_removed": 0
+  },
+  "results": [
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "mae": 1.6111111111111112,
+      "rmse": 1.8929694486000912,
+      "mape": 1.8665235174815644,
+      "smape": 1.8862105873255888,
+      "train_rows": 39,
+      "test_rows": 9
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "mae": 4.0812558790163855,
+      "rmse": 4.464974596962207,
+      "mape": 4.7334721607922985,
+      "smape": 4.8705409502159505,
+      "train_rows": 39,
+      "test_rows": 9
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "mae": 2.6763475827901937,
+      "rmse": 3.3009962089773284,
+      "mape": 3.13055425355981,
+      "smape": 3.0573970029022792,
+      "train_rows": 39,
+      "test_rows": 9
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "hospital_id": "HOSPITAL_A",
+  "model_name": "sarima",
+  "training_rows": 48,
+  "metadata": {
+    "input_path": "ml/data/raw/sample_hospital_a.csv",
+    "resample_frequency": "1h",
+    "history_start": "2026-03-27 00:00:00",
+    "history_end": "2026-03-28 23:00:00",
+    "cleaning_summary": {
+      "input_rows": 48,
+      "output_rows": 48,
+      "dropped_missing_timestamp": 0,
+      "dropped_missing_target": 0,
+      "dropped_missing_hospital_id": 0,
+      "dropped_invalid_capacity": 0,
+      "dropped_negative_target": 0,
+      "dropped_target_exceeds_capacity": 0,
+      "duplicate_rows_removed": 0
+    },
+    "artifact_path": "/Users/myangupta/Downloads/CSCI5980/hospital-forecasting/ml/artifacts/models/HOSPITAL_A_sarima.pkl"
+  }
+}

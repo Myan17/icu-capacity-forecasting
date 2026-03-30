@@ -1,0 +1,242 @@
+{
+  "hospital_id": "HOSPITAL_A",
+  "model_name": "prophet",
+  "generated_at": "2026-03-30T19:13:04.831459+00:00",
+  "forecasts": [
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 00:00:00",
+      "predicted_icu_occupied": 83.64166959700614,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8364166959700614,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 01:00:00",
+      "predicted_icu_occupied": 83.59881867751407,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8359881867751408,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 02:00:00",
+      "predicted_icu_occupied": 84.15232414507572,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8415232414507572,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 03:00:00",
+      "predicted_icu_occupied": 85.58772718928115,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8558772718928115,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 04:00:00",
+      "predicted_icu_occupied": 88.0820506790133,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.880820506790133,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 05:00:00",
+      "predicted_icu_occupied": 91.61526260832916,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.9161526260832916,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 06:00:00",
+      "predicted_icu_occupied": 96.0689638414165,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.960689638414165,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 07:00:00",
+      "predicted_icu_occupied": 101.36586157897577,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.0136586157897576,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 08:00:00",
+      "predicted_icu_occupied": 107.45570544347015,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.0745570544347016,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 09:00:00",
+      "predicted_icu_occupied": 114.14607718580413,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.1414607718580414,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 10:00:00",
+      "predicted_icu_occupied": 120.9987203613794,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.209987203613794,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 11:00:00",
+      "predicted_icu_occupied": 127.50198732924835,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.2750198732924836,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 12:00:00",
+      "predicted_icu_occupied": 133.45996366286724,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.3345996366286723,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 13:00:00",
+      "predicted_icu_occupied": 139.26690224518046,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.3926690224518046,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 14:00:00",
+      "predicted_icu_occupied": 145.75665021080658,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.457566502108066,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 15:00:00",
+      "predicted_icu_occupied": 153.6567999957247,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.536567999957247,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 16:00:00",
+      "predicted_icu_occupied": 163.04201161168427,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.6304201161168428,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 17:00:00",
+      "predicted_icu_occupied": 173.22429008241298,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.7322429008241298,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 18:00:00",
+      "predicted_icu_occupied": 183.17706899200962,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.8317706899200963,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 19:00:00",
+      "predicted_icu_occupied": 192.15786720294554,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 1.9215786720294554,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 20:00:00",
+      "predicted_icu_occupied": 200.0527292485583,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 2.0005272924855833,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 21:00:00",
+      "predicted_icu_occupied": 207.23016036767015,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 2.0723016036767015,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 22:00:00",
+      "predicted_icu_occupied": 214.1098426762719,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 2.141098426762719,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "prophet",
+      "forecast_time": "2026-03-29 23:00:00",
+      "predicted_icu_occupied": 220.84577240522015,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 2.2084577240522014,
+      "risk_level": "RED"
+    }
+  ],
+  "metadata": {
+    "input_path": "ml/data/raw/sample_hospital_a.csv",
+    "horizon": 24,
+    "capacity": 100.0,
+    "history_start": "2026-03-27 00:00:00",
+    "history_end": "2026-03-28 23:00:00",
+    "cleaning_summary": {
+      "input_rows": 48,
+      "output_rows": 48,
+      "dropped_missing_timestamp": 0,
+      "dropped_missing_target": 0,
+      "dropped_missing_hospital_id": 0,
+      "dropped_invalid_capacity": 0,
+      "dropped_negative_target": 0,
+      "dropped_target_exceeds_capacity": 0,
+      "duplicate_rows_removed": 0
+    },
+    "artifact_path": null
+  }
+}
