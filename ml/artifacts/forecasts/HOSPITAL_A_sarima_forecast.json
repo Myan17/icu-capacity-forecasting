@@ -1,0 +1,242 @@
+{
+  "hospital_id": "HOSPITAL_A",
+  "model_name": "sarima",
+  "generated_at": "2026-03-30T19:00:22.949131+00:00",
+  "forecasts": [
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 00:00:00",
+      "predicted_icu_occupied": 82.97530864184803,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8297530864184803,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 01:00:00",
+      "predicted_icu_occupied": 81.97805212620888,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8197805212620888,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 02:00:00",
+      "predicted_icu_occupied": 80.97774729446049,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8097774729446049,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 03:00:00",
+      "predicted_icu_occupied": 79.97778116463618,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.7997778116463619,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 04:00:00",
+      "predicted_icu_occupied": 80.97777740128332,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8097777740128332,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 05:00:00",
+      "predicted_icu_occupied": 81.97777781943364,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8197777781943364,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 06:00:00",
+      "predicted_icu_occupied": 82.97777777297249,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8297777777297248,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 07:00:00",
+      "predicted_icu_occupied": 83.97777777813484,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8397777777813483,
+      "risk_level": "YELLOW"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 08:00:00",
+      "predicted_icu_occupied": 85.97777777756123,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8597777777756123,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 09:00:00",
+      "predicted_icu_occupied": 87.97777777762496,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8797777777762497,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 10:00:00",
+      "predicted_icu_occupied": 88.97777777761789,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8897777777761788,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 11:00:00",
+      "predicted_icu_occupied": 89.97777777761868,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8997777777761868,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 12:00:00",
+      "predicted_icu_occupied": 88.97777777761857,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8897777777761857,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 13:00:00",
+      "predicted_icu_occupied": 87.9777777776186,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8797777777761859,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 14:00:00",
+      "predicted_icu_occupied": 86.9777777776186,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.869777777776186,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 15:00:00",
+      "predicted_icu_occupied": 86.97777777761861,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8697777777761861,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 16:00:00",
+      "predicted_icu_occupied": 87.97777777761861,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8797777777761862,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 17:00:00",
+      "predicted_icu_occupied": 89.97777777761861,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8997777777761862,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 18:00:00",
+      "predicted_icu_occupied": 90.97777777761861,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.9097777777761862,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 19:00:00",
+      "predicted_icu_occupied": 91.97777777761863,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.9197777777761863,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 20:00:00",
+      "predicted_icu_occupied": 90.97777777761863,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.9097777777761863,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 21:00:00",
+      "predicted_icu_occupied": 89.97777777761863,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8997777777761863,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 22:00:00",
+      "predicted_icu_occupied": 88.97777777761864,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8897777777761864,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "sarima",
+      "forecast_time": "2026-03-29 23:00:00",
+      "predicted_icu_occupied": 87.97777777761864,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8797777777761864,
+      "risk_level": "RED"
+    }
+  ],
+  "metadata": {
+    "input_path": "ml/data/raw/sample_hospital_a.csv",
+    "horizon": 24,
+    "capacity": 100.0,
+    "history_start": "2026-03-27 00:00:00",
+    "history_end": "2026-03-28 23:00:00",
+    "cleaning_summary": {
+      "input_rows": 48,
+      "output_rows": 48,
+      "dropped_missing_timestamp": 0,
+      "dropped_missing_target": 0,
+      "dropped_missing_hospital_id": 0,
+      "dropped_invalid_capacity": 0,
+      "dropped_negative_target": 0,
+      "dropped_target_exceeds_capacity": 0,
+      "duplicate_rows_removed": 0
+    },
+    "artifact_path": null
+  }
+}

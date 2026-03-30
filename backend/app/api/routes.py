@@ -66,6 +66,7 @@ def run_forecast(hospital_id: str, db: Session = Depends(get_db)):
     start_time = datetime.utcnow()
 
     # Delete old forecast + alert rows for this hospital before inserting new ones
+    print(">>> DELETING OLD DATA FOR", hospital_id)
     db.query(Forecast).filter(Forecast.hospital_id == hospital_id).delete()
     db.query(Alert).filter(Alert.hospital_id == hospital_id).delete()
     db.commit()

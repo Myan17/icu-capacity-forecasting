@@ -1,0 +1,242 @@
+{
+  "hospital_id": "HOSPITAL_A",
+  "model_name": "baseline",
+  "generated_at": "2026-03-30T19:22:43.964980+00:00",
+  "forecasts": [
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 00:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 01:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 02:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 03:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 04:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 05:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 06:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 07:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 08:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 09:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 10:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 11:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 12:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 13:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 14:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 15:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 16:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 17:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 18:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 19:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 20:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 21:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 22:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    },
+    {
+      "hospital_id": "HOSPITAL_A",
+      "model_name": "baseline",
+      "forecast_time": "2026-03-29 23:00:00",
+      "predicted_icu_occupied": 86.16666666666667,
+      "capacity_used_for_risk": 100.0,
+      "occupancy_ratio": 0.8616666666666667,
+      "risk_level": "RED"
+    }
+  ],
+  "metadata": {
+    "input_path": "ml/data/raw/sample_hospital_a.parquet",
+    "horizon": 24,
+    "capacity": 100.0,
+    "history_start": "2026-03-27 00:00:00",
+    "history_end": "2026-03-28 23:00:00",
+    "cleaning_summary": {
+      "input_rows": 48,
+      "output_rows": 48,
+      "dropped_missing_timestamp": 0,
+      "dropped_missing_target": 0,
+      "dropped_missing_hospital_id": 0,
+      "dropped_invalid_capacity": 0,
+      "dropped_negative_target": 0,
+      "dropped_target_exceeds_capacity": 0,
+      "duplicate_rows_removed": 0
+    },
+    "artifact_path": null
+  }
+}
