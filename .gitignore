@@ -6,10 +6,20 @@ __pycache__/
 .env
 .venv/
 
+# Database (CRITICAL)
+*.db
+
+# AWS credentials
+.aws/
+
 # Node
 node_modules/
+frontend/node_modules/
+
+# Build
 dist/
 build/
+frontend/dist/
 
 # Mac
 .DS_Store
@@ -17,7 +27,7 @@ build/
 # Logs
 *.log
 
-# Data / models (optional for now)
+# Data / models
 data/
 *.pt
 *.pkl
