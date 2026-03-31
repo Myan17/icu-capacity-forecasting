@@ -1,125 +1,55 @@
-"""Central configuration for the ICU forecasting ML module.
-
-This file keeps the project's default settings in one place so training,
-inference, and evaluation use the same assumptions.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Set
 
 
-@dataclass(frozen=True)
+@dataclass
 class ForecastConfig:
-    """Project-wide settings for preprocessing, training, and inference."""
+    """Configuration for ICU forecasting pipeline."""
 
-    # Project paths.
-    project_root: Path = Path(__file__).resolve().parent
-    data_dir: Path = project_root / "data"
-    raw_data_dir: Path = data_dir / "raw"
-    processed_data_dir: Path = data_dir / "processed"
-    artifact_dir: Path = project_root / "artifacts"
-    model_dir: Path = artifact_dir / "models"
-    forecast_dir: Path = artifact_dir / "forecasts"
-    metrics_dir: Path = artifact_dir / "metrics"
-    logs_dir: Path = artifact_dir / "logs"
+    data_dir: Path = Path("data")
+    artifact_dir: Path = Path("artifacts")
+    model_dir: Path = Path("artifacts/models")
+    metrics_dir: Path = Path("artifacts/metrics")
+    plots_dir: Path = Path("artifacts/plots")
 
-    # Data schema.
-    timestamp_column: str = "timestamp"
-    hospital_id_column: str = "hospital_id"
-    target_column: str = "icu_occupied"
-    capacity_column: str = "icu_capacity"
+    # Dataset schema for cleaned_hhs_ml_ready.csv
+    timestamp_col: str = "timestamp"
+    group_col: str = "hospital_id"
+    target_col: str = "icu_occupied"
 
-    # Supported file formats.
-    supported_input_formats: Set[str] = field(default_factory=lambda: {".csv", ".parquet"})
+    feature_columns: list[str] = field(
+        default_factory=lambda: [
+            "total_beds_7_day_avg",
+            "inpatient_beds_used_7_day_avg",
+            "total_adult_patients_hospitalized_confirmed_and_suspected_covid_7_day_avg",
+            "total_adult_patients_hospitalized_confirmed_covid_7_day_avg",
+            "icu_capacity",
+            "staffed_icu_adult_patients_confirmed_covid_7_day_avg",
+        ]
+    )
 
-    # Resampling / forecasting defaults.
-    resample_frequency: str = "1h"
-    forecast_horizon_hours: int = 24
-    test_horizon_hours: int = 24
-    rolling_window_hours: int = 6
-    season_length: int = 24  # Hourly data with daily seasonality.
+    optional_columns: list[str] = field(default_factory=lambda: ["state"])
 
-    # Model selection.
-    enabled_models: List[str] = field(default_factory=lambda: ["baseline", "sarima", "prophet"])
-    default_model_name: str = "baseline"
+    frequency: str = "W"
+    input_is_preaggregated: bool = True
 
-    # Risk threshold configuration based on predicted occupancy ratio.
-    green_threshold: float = 0.70
-    yellow_threshold: float = 0.85
+    forecast_horizon: int = 8
+    test_size: int = 8
+    selection_metric: str = "rmse"
 
-    # Business rules.
-    enforce_capacity_upper_bound: bool = True
-    drop_rows_with_missing_capacity: bool = False
+    use_lag_features: bool = True
+    lag_periods: list[int] = field(default_factory=lambda: [1, 2, 4])
+    rolling_window: int = 4
 
-    # SARIMA defaults.
-    sarima_order: tuple[int, int, int] = (1, 1, 1)
-    sarima_seasonal_order: tuple[int, int, int, int] = (1, 1, 1, 24)
-
-    # Prophet defaults.
-    prophet_daily_seasonality: bool = True
-    prophet_weekly_seasonality: bool = True
-    prophet_yearly_seasonality: bool = False
-    prophet_frequency: str = "1h"
-
-    # Output behavior.
-    forecast_filename_template: str = "{hospital_id}_{model_name}_forecast.json"
-    metrics_filename_template: str = "{hospital_id}_{model_name}_metrics.json"
-    model_filename_template: str = "{hospital_id}_{model_name}.pkl"
+    default_model_name: str = "auto"
 
     def ensure_directories(self) -> None:
-        """Create runtime directories if they do not already exist."""
-        for path in (
-            self.data_dir,
-            self.raw_data_dir,
-            self.processed_data_dir,
-            self.artifact_dir,
-            self.model_dir,
-            self.forecast_dir,
-            self.metrics_dir,
-            self.logs_dir,
-        ):
-            path.mkdir(parents=True, exist_ok=True)
-
-    def required_columns(self) -> List[str]:
-        """Return the minimum required schema for training/inference."""
-        return [
-            self.hospital_id_column,
-            self.timestamp_column,
-            self.target_column,
-        ]
-
-    def optional_columns(self) -> List[str]:
-        """Return optional but useful columns."""
-        return [self.capacity_column]
-
-    def risk_thresholds(self) -> Dict[str, float]:
-        """Return thresholds in a compact dictionary."""
-        return {
-            "green": self.green_threshold,
-            "yellow": self.yellow_threshold,
-        }
-
-    def get_model_defaults(self, model_name: str) -> Dict[str, object]:
-        """Return default settings for a specific model."""
-        if model_name == "baseline":
-            return {"rolling_window": self.rolling_window_hours}
-        if model_name == "sarima":
-            return {
-                "order": self.sarima_order,
-                "seasonal_order": self.sarima_seasonal_order,
-            }
-        if model_name == "prophet":
-            return {
-                "daily_seasonality": self.prophet_daily_seasonality,
-                "weekly_seasonality": self.prophet_weekly_seasonality,
-                "yearly_seasonality": self.prophet_yearly_seasonality,
-                "frequency": self.prophet_frequency,
-            }
-        raise ValueError(f"Unsupported model_name='{model_name}'")
+        self.artifact_dir.mkdir(parents=True, exist_ok=True)
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+        self.metrics_dir.mkdir(parents=True, exist_ok=True)
+        self.plots_dir.mkdir(parents=True, exist_ok=True)
 
 
 DEFAULT_CONFIG = ForecastConfig()
-DEFAULT_CONFIG.ensure_directories()
