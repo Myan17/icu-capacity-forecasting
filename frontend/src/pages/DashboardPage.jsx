@@ -17,7 +17,7 @@ import LoadingState from "../components/common/LoadingState";
 import ErrorState from "../components/common/ErrorState";
 
 export default function DashboardPage() {
-  const [hospitalId, setHospitalId] = useState("HOSPITAL_A");
+  const [hospitalId, setHospitalId] = useState("010001");
   const [snapshot, setSnapshot] = useState(null);
   const [forecasts, setForecasts] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -46,6 +46,8 @@ export default function DashboardPage() {
     setError("");
 
     try {
+   
+      await runForecast(selectedHospitalId);
       const [snapshotData, forecastData, alertsData] = await Promise.all([
         getLatestSnapshot(selectedHospitalId),
         getForecasts(selectedHospitalId),
