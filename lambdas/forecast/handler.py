@@ -58,6 +58,7 @@ from shared.dynamo import (
     snapshots_table,
 )
 from shared.models import ForecastEvent
+from lambdas.forecast.forecast_utils import breach_prob, risk_label, mc_ci
 
 logger  = Logger(service="hospital-forecast")
 tracer  = Tracer(service="hospital-forecast")
@@ -207,25 +208,20 @@ def _mc_forecast(model, model_name: str, df: pd.DataFrame) -> list[dict]:
     series = df["icu_occupied"].values.astype(float)
     preds = np.array(model.predict(HORIZON), dtype=float)
 
-    # Estimate residuals from historical train/test split
     split = max(len(series) - HORIZON, int(len(series) * 0.8))
     train_df = df.iloc[:split].copy()
     actuals = series[split:]
-
     residuals = _compute_residuals(model_name, train_df, len(actuals), actuals)
-    if len(residuals) == 0:
-        residuals = np.zeros(1)
 
     now = datetime.now(timezone.utc)
-    np.random.seed(42)
     steps = []
     for i, yhat in enumerate(preds):
-        sampled = yhat + np.random.choice(residuals, size=MC_SAMPLES, replace=True)
+        lo, hi = mc_ci(residuals, float(yhat), seed=42 + i)
         steps.append({
             "forecast_time": now + timedelta(weeks=i + 1),
             "yhat":          float(yhat),
-            "yhat_lower":    float(np.percentile(sampled, 2.5)),
-            "yhat_upper":    float(np.percentile(sampled, 97.5)),
+            "yhat_lower":    lo,
+            "yhat_upper":    hi,
         })
     return steps
 
@@ -250,11 +246,13 @@ def _compute_residuals(model_name: str, train_df: pd.DataFrame, n: int, actuals:
 # ── Breach probability ────────────────────────────────────────────────────────
 
 def _breach_prob(step: dict, capacity: int) -> float:
-    """P(occupancy > RED_THRESHOLD × capacity) using normal approximation of CI."""
-    yhat, lo, hi = step["yhat"], step["yhat_lower"], step["yhat_upper"]
-    sigma = max((hi - lo) / 3.92, 0.1)   # 95% CI → σ = width / 3.92
-    red_limit = RED_THRESHOLD * capacity
-    return float(min(max(1.0 - norm.cdf(red_limit, loc=yhat, scale=sigma), 0.0), 1.0))
+    return breach_prob(
+        yhat=step["yhat"],
+        yhat_lower=step["yhat_lower"],
+        yhat_upper=step["yhat_upper"],
+        capacity=capacity,
+        red_threshold=RED_THRESHOLD,
+    )
 
 
 # ── DynamoDB writes ───────────────────────────────────────────────────────────
@@ -275,8 +273,7 @@ def _write_forecasts(
         for step in steps:
             ft: datetime = step["forecast_time"]
             yhat = step["yhat"]
-            ratio = yhat / max(capacity, 1)
-            risk = "RED" if ratio >= RED_THRESHOLD else ("YELLOW" if ratio >= YELLOW_THRESHOLD else "GREEN")
+            risk = risk_label(yhat, capacity, yellow=YELLOW_THRESHOLD, red=RED_THRESHOLD)
             bp = _breach_prob(step, capacity)
 
             batch.put_item(Item={
