@@ -1,0 +1,35 @@
+# AWS SAM deployment configuration
+# Run `sam deploy --guided` once to populate account/region, then commit this file.
+
+version = 0.1
+
+[default.global.parameters]
+stack_name = "hospital-forecasting"
+
+[default.build.parameters]
+cached        = true
+parallel      = true
+
+[default.deploy.parameters]
+capabilities          = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+confirm_changeset     = true
+resolve_s3            = true
+resolve_image_repos   = true     # auto-create ECR repo for ForecastFunction container
+image_repositories    = []       # populated by sam deploy --guided
+
+# ── dev ───────────────────────────────────────────────────────────────────────
+[dev.deploy.parameters]
+stack_name        = "hospital-forecasting-dev"
+s3_prefix         = "hospital-forecasting-dev"
+region            = "us-east-2"
+parameter_overrides = "Environment=dev"
+tags              = "Project=hospital-forecasting Environment=dev"
+
+# ── prod ──────────────────────────────────────────────────────────────────────
+[prod.deploy.parameters]
+stack_name        = "hospital-forecasting-prod"
+s3_prefix         = "hospital-forecasting-prod"
+region            = "us-east-2"
+confirm_changeset = true
+parameter_overrides = "Environment=prod"
+tags              = "Project=hospital-forecasting Environment=prod"

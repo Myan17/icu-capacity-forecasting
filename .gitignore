@@ -34,3 +34,6 @@ data/
 
 # VSCode
 .vscode/
+
+.claude/
+CLAUDE.md
