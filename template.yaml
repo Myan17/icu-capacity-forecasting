@@ -1,0 +1,401 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Hospital ICU Capacity Forecasting – Serverless MVP
+  Compute: Lambda | Storage: DynamoDB on-demand + S3 | Scheduler: EventBridge
+  IaC: AWS SAM | Observability: Lambda Powertools + CloudWatch
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  AlertOccupancyYellow:
+    Type: Number
+    Default: 0.75
+    Description: Occupancy ratio threshold for YELLOW alert
+  AlertOccupancyRed:
+    Type: Number
+    Default: 0.90
+    Description: Occupancy ratio threshold for RED alert
+  BreachProbabilityThreshold:
+    Type: Number
+    Default: 0.60
+    Description: P(breach) above which a probabilistic alert is raised
+  ForecastHorizonWeeks:
+    Type: Number
+    Default: 4
+    Description: Number of weeks to forecast ahead
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 300
+    MemorySize: 1024
+    Tracing: Active
+    Environment:
+      Variables:
+        SNAPSHOTS_TABLE: !Ref SnapshotsTable
+        FORECASTS_TABLE: !Ref ForecastsTable
+        ALERTS_TABLE:    !Ref AlertsTable
+        DATA_BUCKET:     !Ref HospitalDataBucket
+        ENVIRONMENT:     !Ref Environment
+        ALERT_OCCUPANCY_YELLOW:   !Ref AlertOccupancyYellow
+        ALERT_OCCUPANCY_RED:      !Ref AlertOccupancyRed
+        BREACH_PROB_THRESHOLD:    !Ref BreachProbabilityThreshold
+        FORECAST_HORIZON_WEEKS:   !Ref ForecastHorizonWeeks
+        POWERTOOLS_SERVICE_NAME:  hospital-forecasting
+        LOG_LEVEL:                INFO
+
+Resources:
+
+  # ── S3 Buckets ──────────────────────────────────────────────────────────────
+  HospitalDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hospital-forecasting-data-${Environment}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hospital-forecasting-ui-${Environment}-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+  # ── DynamoDB Tables (on-demand — pay-per-request, auto-scales) ─────────────
+  # Key design: PK = HOSPITAL#{hospital_id}  SK = SNAPSHOT#{iso_timestamp}
+  SnapshotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub hospital-snapshots-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: hospital-forecasting
+
+  # Key design: PK = HOSPITAL#{hospital_id}  SK = FORECAST#{run_id}#{step_iso}
+  ForecastsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub hospital-forecasts-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: hospital-forecasting
+
+  # Key design: PK = HOSPITAL#{hospital_id}  SK = ALERT#{iso_timestamp}
+  AlertsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub hospital-alerts-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: hospital-forecasting
+
+  # ── Dead-Letter Queues (SQS) ────────────────────────────────────────────────
+
+  IngestDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hospital-ingest-dlq-${Environment}
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Project
+          Value: HospitalForecasting
+
+  ForecastDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hospital-forecast-dlq-${Environment}
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Project
+          Value: HospitalForecasting
+
+  # ── Lambda Functions ─────────────────────────────────────────────────────────
+
+  # Ingest: parse HHS snapshot CSV/JSON from S3 → Great Expectations validate
+  #         → write to DynamoDB; failures create ingestion_failed alert
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub hospital-ingest-${Environment}
+      CodeUri: lambdas/ingest/
+      Handler: handler.lambda_handler
+      Description: >
+        Parses + validates HHS occupancy snapshots via Great Expectations,
+        writes clean records to DynamoDB, raises ingestion_failed alerts on error.
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref HospitalDataBucket
+        - S3WritePolicy:
+            BucketName: !Ref HospitalDataBucket      # for Data Docs HTML upload
+        - DynamoDBWritePolicy:
+            TableName: !Ref SnapshotsTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref AlertsTable
+      Events:
+        WeeklyIngest:
+          Type: ScheduleV2
+          Properties:
+            Name: !Sub hospital-ingest-schedule-${Environment}
+            Description: Pull and validate latest HHS hospital data weekly
+            ScheduleExpression: "cron(0 6 ? * MON *)"
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+            DeadLetterConfig:
+              Type: SQS
+              Destination: !GetAtt IngestDLQ.Arn
+
+  # Forecast: Docker container (heavier ML deps — Prophet, statsmodels, scikit-learn)
+  #   Loads snapshot history from DynamoDB → runs BestModelSelector →
+  #   writes forecasts with intervals → writes probabilistic alerts (deduped)
+  ForecastFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerTag: python3.11-v1
+      DockerContext: lambdas/forecast/
+      Dockerfile: Dockerfile
+    Properties:
+      FunctionName: !Sub hospital-forecast-${Environment}
+      PackageType: Image
+      MemorySize: 2048
+      Timeout: 600
+      Description: >
+        Runs ML forecasting pipeline (Baseline/SARIMA/Prophet auto-selector),
+        outputs confidence intervals and probability-of-breach scores.
+      Environment:
+        Variables:
+          SNAPSHOTS_TABLE:          !Ref SnapshotsTable
+          FORECASTS_TABLE:          !Ref ForecastsTable
+          ALERTS_TABLE:             !Ref AlertsTable
+          DATA_BUCKET:              !Ref HospitalDataBucket
+          ENVIRONMENT:              !Ref Environment
+          ALERT_OCCUPANCY_YELLOW:   !Ref AlertOccupancyYellow
+          ALERT_OCCUPANCY_RED:      !Ref AlertOccupancyRed
+          BREACH_PROB_THRESHOLD:    !Ref BreachProbabilityThreshold
+          FORECAST_HORIZON_WEEKS:   !Ref ForecastHorizonWeeks
+          POWERTOOLS_SERVICE_NAME:  hospital-forecasting
+          LOG_LEVEL:                INFO
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref HospitalDataBucket
+        - DynamoDBReadPolicy:
+            TableName: !Ref SnapshotsTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref ForecastsTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref AlertsTable
+      Events:
+        WeeklyForecast:
+          Type: ScheduleV2
+          Properties:
+            Name: !Sub hospital-forecast-schedule-${Environment}
+            Description: Run weekly ICU occupancy forecasts after ingest completes
+            ScheduleExpression: "cron(0 8 ? * MON *)"
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+            DeadLetterConfig:
+              Type: SQS
+              Destination: !GetAtt ForecastDLQ.Arn
+
+  # API: thin read layer — API Gateway HTTP API → Lambda → DynamoDB
+  #      Mangum adapter lets us reuse FastAPI route definitions
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub hospital-api-${Environment}
+      CodeUri: lambdas/api/
+      Handler: handler.lambda_handler
+      Description: >
+        Serves /health, /snapshots, /forecasts, /alerts endpoints;
+        reads DynamoDB, returns JSON to the React dashboard.
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref SnapshotsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ForecastsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AlertsTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref ForecastsTable    # POST /forecast triggers forecast run
+        - DynamoDBWritePolicy:
+            TableName: !Ref AlertsTable
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+        LatestSnapshot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /snapshots/latest/{hospital_id}
+            Method: GET
+        GetForecasts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /forecasts/{hospital_id}
+            Method: GET
+        GetAlerts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /alerts/{hospital_id}
+            Method: GET
+        TriggerForecast:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /forecast/{hospital_id}
+            Method: POST
+
+  # ── API Gateway HTTP API (lighter than REST API — correct for MVP) ──────────
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: Hospital ICU Forecast API
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        MaxAge: 300
+
+  # ── CloudFront Distribution (S3 static site + HTTPS + CDN) ─────────────────
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub OAI for hospital-forecasting-${Environment}
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOAI.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub ${FrontendBucket.Arn}/*
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub Hospital Forecasting Dashboard (${Environment})
+        Origins:
+          - DomainName: !GetAtt FrontendBucket.DomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOAI}
+        Enabled: true
+        DefaultRootObject: index.html
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
+          AllowedMethods: [GET, HEAD, OPTIONS]
+        PriceClass: PriceClass_100
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway HTTP API endpoint (use this in frontend VITE_API_URL)
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiEndpoint
+
+  CloudFrontURL:
+    Description: React dashboard URL (HTTPS via CloudFront)
+    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+
+  FrontendBucketName:
+    Description: S3 bucket — deploy React build here
+    Value: !Ref FrontendBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-FrontendBucket
+
+  DataBucketName:
+    Description: S3 bucket for raw HHS data + model artifacts
+    Value: !Ref HospitalDataBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-DataBucket
+
+  SnapshotsTableName:
+    Value: !Ref SnapshotsTable
+  ForecastsTableName:
+    Value: !Ref ForecastsTable
+  AlertsTableName:
+    Value: !Ref AlertsTable
+
+  IngestFunctionArn:
+    Value: !GetAtt IngestFunction.Arn
+  ForecastFunctionArn:
+    Value: !GetAtt ForecastFunction.Arn
+  ApiFunctionArn:
+    Value: !GetAtt ApiFunction.Arn
+
+  IngestDLQUrl:
+    Value: !Ref IngestDLQ
+  ForecastDLQUrl:
+    Value: !Ref ForecastDLQ
