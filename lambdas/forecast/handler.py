@@ -34,7 +34,6 @@ import pandas as pd
 from aws_lambda_powertools import Logger, Metrics, Tracer
 from aws_lambda_powertools.metrics import MetricUnit
 from boto3.dynamodb.conditions import Key
-from scipy.stats import norm
 
 # ML pipeline (bundled in container image)
 import sys
@@ -302,8 +301,7 @@ def _write_probabilistic_alerts(hospital_id: str, steps: list[dict], capacity: i
             continue
 
         ft: datetime = step["forecast_time"]
-        ratio = step["yhat"] / max(capacity, 1)
-        risk = "RED" if ratio >= RED_THRESHOLD else "YELLOW"
+        risk = risk_label(step["yhat"], capacity, yellow=YELLOW_THRESHOLD, red=RED_THRESHOLD)
         eta = round((ft - now).total_seconds() / 3600, 1)
         dedupe = alert_dedupe_key(hospital_id, risk, ft)
 
