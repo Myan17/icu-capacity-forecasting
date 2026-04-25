@@ -26,3 +26,13 @@ export async function getAlerts(hospitalId) {
   const response = await api.get(`/alerts/${hospitalId}`);
   return response.data;
 }
+
+export async function getLoadTestLatest() {
+  const response = await api.get("/load-test/latest");
+  return response.data;
+}
+
+export async function getLoadTestRuns() {
+  const response = await api.get("/load-test/runs");
+  return response.data;
+}
