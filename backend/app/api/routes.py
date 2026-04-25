@@ -1,7 +1,10 @@
+import re
 from datetime import datetime, timedelta
 
+import mlflow
+
 import pandas as pd
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -125,3 +128,74 @@ def get_alerts(hospital_id: str, db: Session = Depends(get_db)):
         .all()
     )
     return rows
+
+
+_HOSPITAL_METRIC_RE = re.compile(r"^(H\d{3})_(p50_ms|p95_ms|p99_ms|failure_rate|rps)$")
+_LOAD_TEST_EXPERIMENT = "hospital-load-test"
+
+
+@router.get("/load-test/latest")
+def get_load_test_latest():
+    try:
+        runs = mlflow.search_runs(
+            experiment_names=[_LOAD_TEST_EXPERIMENT],
+            max_results=1,
+            order_by=["start_time DESC"],
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="no runs found")
+
+    if runs.empty:
+        raise HTTPException(status_code=404, detail="no runs found")
+
+    run = runs.iloc[0]
+    tags = {k.replace("tags.", ""): v for k, v in run.items() if k.startswith("tags.")}
+    metrics = {k.replace("metrics.", ""): v for k, v in run.items() if k.startswith("metrics.")}
+
+    hospitals: dict[str, dict] = {}
+    for key, val in metrics.items():
+        m = _HOSPITAL_METRIC_RE.match(key)
+        if m:
+            hid, field = m.group(1), m.group(2)
+            hospitals.setdefault(hid, {"hospital_id": hid})[field] = round(float(val), 3)
+
+    return {
+        "run_id":               run.get("run_id", ""),
+        "timestamp":            tags.get("timestamp", ""),
+        "num_hospitals":        int(tags.get("num_hospitals", 0)),
+        "run_duration_s":       float(tags.get("run_duration_s", 0)),
+        "overall_p95_ms":       float(metrics.get("overall_p95_ms", 0)),
+        "overall_failure_rate": float(metrics.get("overall_failure_rate", 0)),
+        "overall_rps":          float(metrics.get("overall_rps", 0)),
+        "hospitals":            sorted(hospitals.values(), key=lambda h: h["hospital_id"]),
+    }
+
+
+@router.get("/load-test/runs")
+def get_load_test_runs():
+    try:
+        runs = mlflow.search_runs(
+            experiment_names=[_LOAD_TEST_EXPERIMENT],
+            max_results=20,
+            order_by=["start_time DESC"],
+        )
+    except Exception:
+        return []
+
+    if runs.empty:
+        return []
+
+    result = []
+    for _, run in runs.iterrows():
+        tags = {k.replace("tags.", ""): v for k, v in run.items() if k.startswith("tags.")}
+        metrics = {k.replace("metrics.", ""): v for k, v in run.items() if k.startswith("metrics.")}
+        result.append({
+            "run_id":               run.get("run_id", ""),
+            "timestamp":            tags.get("timestamp", str(run.get("start_time", ""))),
+            "num_hospitals":        int(tags.get("num_hospitals", 0)),
+            "run_duration_s":       float(tags.get("run_duration_s", 0)),
+            "overall_p95_ms":       float(metrics.get("overall_p95_ms", 0)),
+            "overall_failure_rate": float(metrics.get("overall_failure_rate", 0)),
+            "overall_rps":          float(metrics.get("overall_rps", 0)),
+        })
+    return result
