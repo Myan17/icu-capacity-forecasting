@@ -11,3 +11,4 @@ scikit-learn
 statsmodels
 apscheduler
 python-multipart
+mlflow
