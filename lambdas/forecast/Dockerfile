@@ -17,7 +17,8 @@ COPY ../../ml /var/task/ml
 # Copy the shared helpers (DynamoDB key builders + Pydantic models)
 COPY ../../shared /var/task/shared
 
-# Copy the Lambda handler
+# Copy the Lambda handler and its pure-math utilities
 COPY handler.py /var/task/handler.py
+COPY forecast_utils.py /var/task/forecast_utils.py
 
 CMD ["handler.lambda_handler"]
