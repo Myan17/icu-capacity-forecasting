@@ -74,14 +74,15 @@ def log_run(environment) -> None:
                 f"{hid}_rps":          rps,
             })
 
-            p95_values.append(p95)
-            failure_rates.append(failure_rate)
+            p95_values.append((p95, total_reqs))
+            failure_rates.append((failure_rate, total_reqs))
             rps_values.append(rps)
 
         if p95_values:
+            total_weight = sum(reqs for _, reqs in p95_values) or 1
             mlflow.log_metrics({
-                "overall_p95_ms":       round(sum(p95_values) / len(p95_values), 1),
-                "overall_failure_rate": round(sum(failure_rates) / len(failure_rates), 4),
+                "overall_p95_ms":       round(sum(p * r for p, r in p95_values) / total_weight, 1),
+                "overall_failure_rate": round(sum(f * r for f, r in failure_rates) / total_weight, 4),
                 "overall_rps":          round(sum(rps_values), 3),
             })
 
