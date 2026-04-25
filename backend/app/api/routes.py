@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime, timedelta
 
@@ -14,6 +15,7 @@ from app.services.forecast import naive_forecast_next_24h
 from app.services.risk import compute_risk
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/health")
@@ -130,6 +132,20 @@ def get_alerts(hospital_id: str, db: Session = Depends(get_db)):
     return rows
 
 
+def _safe_int(v, default: int = 0) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(v, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
 _HOSPITAL_METRIC_RE = re.compile(r"^(H\d{3})_(p50_ms|p95_ms|p99_ms|failure_rate|rps)$")
 _LOAD_TEST_EXPERIMENT = "hospital-load-test"
 
@@ -142,15 +158,16 @@ def get_load_test_latest():
             max_results=1,
             order_by=["start_time DESC"],
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("MLflow search_runs failed: %s", exc)
         raise HTTPException(status_code=404, detail="no runs found")
 
     if runs.empty:
         raise HTTPException(status_code=404, detail="no runs found")
 
     run = runs.iloc[0]
-    tags = {k.replace("tags.", ""): v for k, v in run.items() if k.startswith("tags.")}
-    metrics = {k.replace("metrics.", ""): v for k, v in run.items() if k.startswith("metrics.")}
+    tags = {k[len("tags."):]: v for k, v in run.items() if k.startswith("tags.")}
+    metrics = {k[len("metrics."):]: v for k, v in run.items() if k.startswith("metrics.")}
 
     hospitals: dict[str, dict] = {}
     for key, val in metrics.items():
@@ -162,11 +179,11 @@ def get_load_test_latest():
     return {
         "run_id":               run.get("run_id", ""),
         "timestamp":            tags.get("timestamp", ""),
-        "num_hospitals":        int(tags.get("num_hospitals", 0)),
-        "run_duration_s":       float(tags.get("run_duration_s", 0)),
-        "overall_p95_ms":       float(metrics.get("overall_p95_ms", 0)),
-        "overall_failure_rate": float(metrics.get("overall_failure_rate", 0)),
-        "overall_rps":          float(metrics.get("overall_rps", 0)),
+        "num_hospitals":        _safe_int(tags.get("num_hospitals", 0)),
+        "run_duration_s":       _safe_float(tags.get("run_duration_s", 0)),
+        "overall_p95_ms":       _safe_float(metrics.get("overall_p95_ms", 0)),
+        "overall_failure_rate": _safe_float(metrics.get("overall_failure_rate", 0)),
+        "overall_rps":          _safe_float(metrics.get("overall_rps", 0)),
         "hospitals":            sorted(hospitals.values(), key=lambda h: h["hospital_id"]),
     }
 
@@ -179,7 +196,8 @@ def get_load_test_runs():
             max_results=20,
             order_by=["start_time DESC"],
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("MLflow search_runs failed: %s", exc)
         return []
 
     if runs.empty:
@@ -187,15 +205,15 @@ def get_load_test_runs():
 
     result = []
     for _, run in runs.iterrows():
-        tags = {k.replace("tags.", ""): v for k, v in run.items() if k.startswith("tags.")}
-        metrics = {k.replace("metrics.", ""): v for k, v in run.items() if k.startswith("metrics.")}
+        tags = {k[len("tags."):]: v for k, v in run.items() if k.startswith("tags.")}
+        metrics = {k[len("metrics."):]: v for k, v in run.items() if k.startswith("metrics.")}
         result.append({
             "run_id":               run.get("run_id", ""),
             "timestamp":            tags.get("timestamp", str(run.get("start_time", ""))),
-            "num_hospitals":        int(tags.get("num_hospitals", 0)),
-            "run_duration_s":       float(tags.get("run_duration_s", 0)),
-            "overall_p95_ms":       float(metrics.get("overall_p95_ms", 0)),
-            "overall_failure_rate": float(metrics.get("overall_failure_rate", 0)),
-            "overall_rps":          float(metrics.get("overall_rps", 0)),
+            "num_hospitals":        _safe_int(tags.get("num_hospitals", 0)),
+            "run_duration_s":       _safe_float(tags.get("run_duration_s", 0)),
+            "overall_p95_ms":       _safe_float(metrics.get("overall_p95_ms", 0)),
+            "overall_failure_rate": _safe_float(metrics.get("overall_failure_rate", 0)),
+            "overall_rps":          _safe_float(metrics.get("overall_rps", 0)),
         })
     return result
