@@ -17,7 +17,7 @@ from locust import HttpUser, between, events, task
 
 from tests.load.mlflow_reporter import log_run
 
-HOSPITAL_IDS = [f"H{str(i).zfill(3)}" for i in range(1, 11)]  # H001–H010
+HOSPITAL_IDS = ["010001", "010005", "010006", "010007", "010008", "010011", "010012", "010016", "010018", "010019"]
 _user_counter = 0
 
 
@@ -31,31 +31,19 @@ class HospitalUser(HttpUser):
 
     @task(5)
     def get_latest_snapshot(self):
-        self.client.get(
-            f"/snapshots/latest/{self.hospital_id}",
-            name="/snapshots/latest/[id]",
-        )
+        self.client.get(f"/snapshots/latest/{self.hospital_id}")
 
     @task(4)
     def get_forecasts(self):
-        self.client.get(
-            f"/forecasts/{self.hospital_id}",
-            name="/forecasts/[id]",
-        )
+        self.client.get(f"/forecasts/{self.hospital_id}")
 
     @task(3)
     def get_alerts(self):
-        self.client.get(
-            f"/alerts/{self.hospital_id}",
-            name="/alerts/[id]",
-        )
+        self.client.get(f"/alerts/{self.hospital_id}")
 
     @task(1)
     def run_forecast(self):
-        self.client.post(
-            f"/forecast/{self.hospital_id}",
-            name="/forecast/[id]",
-        )
+        self.client.post(f"/forecast/{self.hospital_id}")
 
 
 @events.quitting.add_listener

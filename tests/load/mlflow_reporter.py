@@ -17,7 +17,7 @@ import mlflow
 
 
 EXPERIMENT_NAME = "hospital-load-test"
-_HOSPITAL_RE = re.compile(r"/(H\d{3})\b")
+_HOSPITAL_RE = re.compile(r"/(\d{6})\b")
 
 
 def _extract_hospital(name: str) -> str | None:
