@@ -101,23 +101,24 @@ def get_alerts(hospital_id: str, limit: int = 50):
     return _clean(items)
 
 
-@app.post("/forecast/{hospital_id}")
+@app.post("/forecast/{hospital_id}", status_code=202)
 @tracer.capture_method
 def trigger_forecast(hospital_id: str):
-    """Invoke the ForecastFunction Lambda directly (synchronous for dashboard refresh)."""
-    lambda_client = boto3.client("lambda")
-    fn_name = os.environ.get("FORECAST_FUNCTION_NAME", f"hospital-forecast-{os.environ.get('ENVIRONMENT', 'dev')}")
+    """Enqueue an async forecast job. Returns 202 immediately; ForecastFunction
+    consumes from SQS, runs the ML pipeline, and writes results to DynamoDB.
+    Poll GET /forecasts/{hospital_id} to retrieve results when ready."""
+    sqs = boto3.client("sqs")
+    queue_url = os.environ["FORECAST_QUEUE_URL"]
     try:
-        resp = lambda_client.invoke(
-            FunctionName=fn_name,
-            InvocationType="RequestResponse",
-            Payload=json.dumps({"hospital_id": hospital_id}),
+        sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps({"hospital_id": hospital_id}),
         )
-        payload = json.loads(resp["Payload"].read())
         metrics.add_metric(name="ForecastTriggers", unit=MetricUnit.Count, value=1)
-        return {"status": "triggered", "result": payload}
+        logger.info("Forecast queued", extra={"hospital_id": hospital_id})
+        return {"status": "queued", "hospital_id": hospital_id}
     except Exception as exc:
-        logger.error("Forecast trigger failed", extra={"error": str(exc)})
+        logger.error("Forecast enqueue failed", extra={"error": str(exc)})
         raise HTTPException(status_code=500, detail=str(exc))
 
 

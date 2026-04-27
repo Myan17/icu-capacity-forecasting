@@ -78,6 +78,13 @@ MC_SAMPLES       = 500   # Monte Carlo draws for confidence intervals on non-Pro
 @tracer.capture_lambda_handler
 @metrics.log_metrics(capture_cold_start_metric=True)
 def lambda_handler(event: dict, context: Any) -> dict:
+    # SQS trigger: one record per hospital (BatchSize=1 in template.yaml).
+    # Re-raise on error so SQS retries the message (up to maxReceiveCount=3)
+    # before routing to the DLQ.
+    if "Records" in event:
+        return _handle_sqs_event(event["Records"])
+
+    # Direct invocation: EventBridge weekly schedule or manual invoke.
     payload = ForecastEvent(**event) if event else ForecastEvent()
     hospital_ids = _resolve_hospital_ids(payload.hospital_id)
 
@@ -90,6 +97,20 @@ def lambda_handler(event: dict, context: Any) -> dict:
             logger.error("Forecast failed", extra={"hospital_id": hid, "error": str(exc)})
             results.append({"hospital_id": hid, "status": "error", "error": str(exc)})
 
+    return {"status": "complete", "hospitals": results}
+
+
+def _handle_sqs_event(records: list[dict]) -> dict:
+    """Process SQS records. Raises on failure so SQS retries unprocessed messages."""
+    results = []
+    for record in records:
+        body = json.loads(record["body"])
+        hospital_id = body.get("hospital_id")
+        if not hospital_id:
+            logger.warning("SQS record missing hospital_id — skipping", extra={"body": body})
+            continue
+        result = _run_forecast_for_hospital(hospital_id)  # raises → SQS retry
+        results.append(result)
     return {"status": "complete", "hospitals": results}
 
 
