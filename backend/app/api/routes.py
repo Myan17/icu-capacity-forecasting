@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.tables import Alert, Forecast, Snapshot
 from app.schemas.snapshot import SnapshotCreate
-from app.services.forecast import naive_forecast_next_24h
+from app.services.forecast import MLForecastService
 from app.services.risk import compute_risk
 
 router = APIRouter()
@@ -47,7 +47,13 @@ def latest_snapshot(hospital_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/forecast/{hospital_id}")
-def run_forecast(hospital_id: str, db: Session = Depends(get_db)):
+def run_forecast(
+    hospital_id: str,
+    model: str | None = None,
+    db: Session = Depends(get_db),
+):
+    from app.core.config import settings
+
     rows = (
         db.query(Snapshot)
         .filter(Snapshot.hospital_id == hospital_id)
@@ -69,9 +75,22 @@ def run_forecast(hospital_id: str, db: Session = Depends(get_db)):
         ]
     )
 
-    preds = naive_forecast_next_24h(df)
     latest_capacity = int(df["icu_capacity"].iloc[-1])
-    start_time = datetime.utcnow()
+    model_preference = model or settings.FORECAST_MODEL
+
+    # Use the ML forecast service
+    service = MLForecastService(
+        model_preference=model_preference,
+        horizon=settings.FORECAST_HORIZON,
+        frequency=settings.FORECAST_FREQUENCY,
+        yellow_threshold=settings.ALERT_OCCUPANCY_YELLOW,
+        red_threshold=settings.ALERT_OCCUPANCY_RED,
+    )
+
+    try:
+        forecast_steps = service.generate_forecast(df, latest_capacity)
+    except ValueError as exc:
+        return {"message": str(exc), "hospital_id": hospital_id}
 
     # Delete old forecast + alert rows for this hospital before inserting new ones
     print(">>> DELETING OLD DATA FOR", hospital_id)
@@ -80,37 +99,48 @@ def run_forecast(hospital_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     created = []
-    for i, pred in enumerate(preds):
-        forecast_time = start_time + timedelta(hours=i + 1)
-        risk_level = compute_risk(pred, latest_capacity)
-
+    for step in forecast_steps:
         forecast_row = Forecast(
             hospital_id=hospital_id,
-            forecast_time=forecast_time,
-            predicted_icu_occupied=pred,
-            risk_level=risk_level,
+            forecast_time=step.forecast_time,
+            predicted_icu_occupied=step.predicted_icu_occupied,
+            yhat_lower=step.yhat_lower,
+            yhat_upper=step.yhat_upper,
+            risk_level=step.risk_level,
+            model_name=step.model_name,
+            breach_prob=step.breach_prob,
         )
         db.add(forecast_row)
 
         created.append(
             {
-                "forecast_time": forecast_time.isoformat(),
-                "predicted_icu_occupied": pred,
-                "risk_level": risk_level,
+                "forecast_time": step.forecast_time.isoformat(),
+                "predicted_icu_occupied": step.predicted_icu_occupied,
+                "yhat_lower": step.yhat_lower,
+                "yhat_upper": step.yhat_upper,
+                "risk_level": step.risk_level,
+                "model_name": step.model_name,
+                "breach_prob": step.breach_prob,
             }
         )
 
-        if risk_level in {"YELLOW", "RED"}:
+        if step.risk_level in {"YELLOW", "RED"}:
             alert = Alert(
                 hospital_id=hospital_id,
-                created_at=datetime.utcnow(),
-                risk_level=risk_level,
-                message=f"Predicted ICU occupancy risk {risk_level} at {forecast_time.isoformat()}",
+                created_at=step.forecast_time,
+                risk_level=step.risk_level,
+                message=f"Predicted ICU occupancy risk {step.risk_level} at {step.forecast_time.isoformat()}",
+                breach_prob=step.breach_prob,
             )
             db.add(alert)
 
     db.commit()
-    return {"hospital_id": hospital_id, "forecasts": created}
+    return {
+        "hospital_id": hospital_id,
+        "model": forecast_steps[0].model_name if forecast_steps else None,
+        "horizon": len(forecast_steps),
+        "forecasts": created,
+    }
 
 
 @router.get("/forecasts/{hospital_id}")

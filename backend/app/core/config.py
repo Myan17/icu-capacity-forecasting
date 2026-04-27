@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     ALERT_OCCUPANCY_RED: float = 0.90
     FORECAST_HOURS: int = 24
 
+    # ML model integration settings
+    FORECAST_MODEL: str = "auto"          # auto | baseline | sarima | prophet
+    FORECAST_HORIZON: int = 8             # number of forecast steps (weeks)
+    FORECAST_FREQUENCY: str = "W"         # pandas offset alias
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
