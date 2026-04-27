@@ -83,19 +83,57 @@ Baseline outperforms advanced models on the current dataset, which is expected w
 
 ### Load Testing
 
-Locust simulates one user per hospital hitting all four core endpoints with realistic task weights (snapshots 5×, forecasts 4×, alerts 3×, run-forecast 1×). On run completion, an MLflow event hook aggregates per-hospital metrics and logs them as a single experiment run.
+Locust simulates concurrent hospital users hitting all four core endpoints with realistic task weights (snapshots 5×, forecasts 4×, alerts 3×, run-forecast 1×). On completion, an MLflow event hook aggregates per-hospital metrics and logs them as a single experiment run.
 
+**Stepped load test** (runs at escalating concurrency, auto-increments CSV run number):
 ```bash
-# Mac terminal — run against EC2 backend
+./tests/load/run_stepped.sh                        # default: 10 → 20 → 30 → 50 users, 120s each
+USER_STEPS="20 50" RUN_TIME=60s ./tests/load/run_stepped.sh   # custom
+```
+
+**Single run:**
+```bash
 locust -f tests/load/locustfile.py \
   --host http://52.15.187.251:8000 \
-  --users 10 --spawn-rate 1 \
+  --users 10 --spawn-rate 2 \
   --run-time 120s --headless \
-  --csv reports/run_$(date +%Y%m%d_%H%M%S)
+  --csv reports/run_N
+```
+
+**Compare all runs:**
+```bash
+python tests/load/compare_runs.py           # all runs
+python tests/load/compare_runs.py --last 4  # last 4 only
 ```
 
 MLflow logs per-hospital: `p50_ms`, `p95_ms`, `p99_ms`, `failure_rate`, `rps`  
 MLflow logs summary: `overall_p95_ms`, `overall_failure_rate`, `overall_rps`
+
+#### Capacity findings
+
+Stepped tests (runs 7–10) against the EC2 single-worker backend revealed a clear breakpoint at ~30 concurrent users:
+
+| Users | Requests | Failures | Median | P95    | RPS  |
+|-------|----------|----------|--------|--------|------|
+| 10    | 584      | 0 (0%)   | 27 ms  | 120 ms | 4.9  |
+| 20    | 1162     | 0 (0%)   | 27 ms  | 150 ms | 9.7  |
+| 30    | 726      | 0 (0%)   | 880 ms | 6.7 s  | 6.1  |
+| 50    | 571      | 22 (4%)  | 6.7 s  | 16 s   | 4.9  |
+
+**Root cause:** `POST /forecast/{id}` runs ML model selection, fitting, and Monte Carlo CI — 100–300 ms of CPU-bound work. On a single-worker async server this blocked the event loop, queuing all concurrent requests behind each inference call. At 30+ users the queue never drained, causing congestion collapse (RPS *fell* as concurrency rose).
+
+**Fix — `run_in_executor` (`backend/app/api/routes.py`):** The `run_forecast` handler is now `async` and offloads the `generate_forecast()` call to asyncio's default thread pool:
+
+```python
+loop = asyncio.get_running_loop()
+forecast_steps = await loop.run_in_executor(
+    None, service.generate_forecast, df, latest_capacity
+)
+```
+
+The event loop stays free to serve snapshot and alert reads while inference runs in a background thread. numpy/scipy release the GIL during computation so threads execute in true parallel on multi-core instances. DB reads (before) and DB writes (after) stay on the main event loop — they're fast SQLite operations unaffected by the move.
+
+**Next step — full async architecture:** The correct production fix is to decouple `POST /forecast` from the request cycle entirely: accept the call, enqueue to SQS, return `202 Accepted`, and let the forecast Lambda compute and persist the result asynchronously. `GET /forecasts/{id}` then always serves pre-computed results with ~27 ms latency. This is the Lambda refactor targeted in Phase 3.
 
 ### Test Suite
 
