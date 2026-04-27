@@ -211,3 +211,44 @@ def test_s3_artifact_loaded_when_present():
     h = next(r for r in result["hospitals"] if r["hospital_id"] == "H001")
     assert h["status"] == "success"
     assert h["model"] == "baseline"
+
+
+# ── SQS trigger path ──────────────────────────────────────────────────────────
+
+def _sqs_event(hospital_id: str) -> dict:
+    """Minimal SQS Records envelope — mirrors what AWS delivers at BatchSize=1."""
+    import json as _json
+    return {"Records": [{"body": _json.dumps({"hospital_id": hospital_id})}]}
+
+
+@mock_aws
+def test_sqs_trigger_runs_forecast():
+    """SQS envelope routes to the ML pipeline and writes results to DynamoDB."""
+    ddb = boto3.resource("dynamodb", region_name="us-east-1")
+    s3  = boto3.client("s3",         region_name="us-east-1")
+    _make_tables(ddb)
+    s3.create_bucket(Bucket=DATA_BUCKET)
+    df = _seed_snapshots(ddb, "H001")
+
+    with patch("lambdas.forecast.handler._select_model", return_value=_fitted_baseline(df)):
+        result = lambda_handler(_sqs_event("H001"), _CTX)
+
+    assert result["status"] == "complete"
+    h = next(r for r in result["hospitals"] if r["hospital_id"] == "H001")
+    assert h["status"] == "success"
+
+
+@mock_aws
+def test_sqs_missing_hospital_id_is_skipped():
+    """Record without hospital_id emits a warning and returns an empty hospital list."""
+    ddb = boto3.resource("dynamodb", region_name="us-east-1")
+    s3  = boto3.client("s3",         region_name="us-east-1")
+    _make_tables(ddb)
+    s3.create_bucket(Bucket=DATA_BUCKET)
+
+    import json as _json
+    bad_event = {"Records": [{"body": _json.dumps({"not_a_hospital": "oops"})}]}
+    result = lambda_handler(bad_event, _CTX)
+
+    assert result["status"] == "complete"
+    assert result["hospitals"] == []

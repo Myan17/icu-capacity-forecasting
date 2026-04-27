@@ -157,6 +157,22 @@ Resources:
         - Key: Project
           Value: HospitalForecasting
 
+  # ── Forecast job queue ───────────────────────────────────────────────────────
+  # POST /forecast enqueues here; ForecastFunction consumes and runs ML pipeline.
+  # VisibilityTimeout must exceed ForecastFunction timeout (600 s).
+  ForecastQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub hospital-forecast-queue-${Environment}
+      VisibilityTimeout: 660
+      MessageRetentionPeriod: 86400   # 24 hours — long enough to survive transient Lambda failures
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ForecastDLQ.Arn
+        maxReceiveCount: 3            # 3 attempts before moving to DLQ
+      Tags:
+        - Key: Project
+          Value: HospitalForecasting
+
   # ── Lambda Functions ─────────────────────────────────────────────────────────
 
   # Ingest: parse HHS snapshot CSV/JSON from S3 → Great Expectations validate
@@ -231,7 +247,17 @@ Resources:
             TableName: !Ref ForecastsTable
         - DynamoDBWritePolicy:
             TableName: !Ref AlertsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ForecastQueue.QueueName
       Events:
+        # On-demand: triggered by POST /forecast via SQS (one message per hospital)
+        ForecastQueueTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ForecastQueue.Arn
+            BatchSize: 1            # one hospital per invocation — clean isolation
+            MaximumConcurrency: 5   # cap parallel executions to control ML CPU cost
+        # Scheduled: runs all hospitals every Monday after ingest completes
         WeeklyForecast:
           Type: ScheduleV2
           Properties:
@@ -245,6 +271,7 @@ Resources:
               Destination: !GetAtt ForecastDLQ.Arn
 
   # API: thin read layer — API Gateway HTTP API → Lambda → DynamoDB
+  #      POST /forecast enqueues to ForecastQueue (async) and returns 202.
   #      Mangum adapter lets us reuse FastAPI route definitions
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -255,6 +282,10 @@ Resources:
       Description: >
         Serves /health, /snapshots, /forecasts, /alerts endpoints;
         reads DynamoDB, returns JSON to the React dashboard.
+        POST /forecast enqueues to SQS and returns 202 — no ML work in API path.
+      Environment:
+        Variables:
+          FORECAST_QUEUE_URL: !Ref ForecastQueue
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref SnapshotsTable
@@ -262,10 +293,8 @@ Resources:
             TableName: !Ref ForecastsTable
         - DynamoDBReadPolicy:
             TableName: !Ref AlertsTable
-        - DynamoDBWritePolicy:
-            TableName: !Ref ForecastsTable    # POST /forecast triggers forecast run
-        - DynamoDBWritePolicy:
-            TableName: !Ref AlertsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ForecastQueue.QueueName
       Events:
         Health:
           Type: HttpApi
@@ -399,3 +428,6 @@ Outputs:
     Value: !Ref IngestDLQ
   ForecastDLQUrl:
     Value: !Ref ForecastDLQ
+  ForecastQueueUrl:
+    Description: SQS queue URL for on-demand forecast jobs (POST /forecast enqueues here)
+    Value: !Ref ForecastQueue
