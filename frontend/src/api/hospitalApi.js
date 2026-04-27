@@ -17,8 +17,9 @@ export async function getForecasts(hospitalId) {
   return response.data;
 }
 
-export async function runForecast(hospitalId) {
-  const response = await api.post(`/forecast/${hospitalId}`);
+export async function runForecast(hospitalId, model = null) {
+  const params = model ? `?model=${model}` : "";
+  const response = await api.post(`/forecast/${hospitalId}${params}`);
   return response.data;
 }
 

@@ -108,7 +108,7 @@ export default function DashboardPage() {
         <>
           <StatusBanner riskLevel={currentRisk} hospitalId={hospitalId} />
 
-          <KpiGrid snapshot={snapshot} latestForecast={latestForecast} />
+          <KpiGrid snapshot={snapshot} latestForecast={latestForecast} forecasts={forecasts} />
 
           <div className="dashboard-grid">
             <ForecastChart
