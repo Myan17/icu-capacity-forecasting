@@ -1,0 +1,15 @@
+Method,Name,Error,Occurrences
+GET,/alerts/010008,HTTPError('500 Server Error: Internal Server Error for url: /alerts/010008'),4
+POST,/forecast/010005,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010005'),2
+GET,/alerts/010007,HTTPError('500 Server Error: Internal Server Error for url: /alerts/010007'),5
+GET,/alerts/010001,HTTPError('500 Server Error: Internal Server Error for url: /alerts/010001'),5
+GET,/alerts/010005,HTTPError('500 Server Error: Internal Server Error for url: /alerts/010005'),5
+GET,/snapshots/latest/010006,HTTPError('500 Server Error: Internal Server Error for url: /snapshots/latest/010006'),9
+POST,/forecast/010007,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010007'),2
+GET,/snapshots/latest/010007,HTTPError('500 Server Error: Internal Server Error for url: /snapshots/latest/010007'),10
+GET,/snapshots/latest/010001,HTTPError('500 Server Error: Internal Server Error for url: /snapshots/latest/010001'),9
+GET,/snapshots/latest/010008,HTTPError('500 Server Error: Internal Server Error for url: /snapshots/latest/010008'),15
+GET,/snapshots/latest/010005,HTTPError('500 Server Error: Internal Server Error for url: /snapshots/latest/010005'),11
+POST,/forecast/010006,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010006'),3
+GET,/alerts/010006,HTTPError('500 Server Error: Internal Server Error for url: /alerts/010006'),7
+POST,/forecast/010001,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010001'),2
