@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences
+POST,/forecast/[id],HTTPError('500 Server Error: Internal Server Error for url: /forecast/[id]'),11
+GET,/snapshots/latest/[id],HTTPError('500 Server Error: Internal Server Error for url: /snapshots/latest/[id]'),45
+GET,/alerts/[id],HTTPError('500 Server Error: Internal Server Error for url: /alerts/[id]'),36
+GET,/forecasts/[id],HTTPError('500 Server Error: Internal Server Error for url: /forecasts/[id]'),48
