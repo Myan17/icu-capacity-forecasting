@@ -1,0 +1,9 @@
+Method,Name,Error,Occurrences
+POST,/forecast/010005,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010005'),4
+POST,/forecast/010012,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010012'),2
+POST,/forecast/010016,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010016'),2
+POST,/forecast/010011,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010011'),3
+POST,/forecast/010006,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010006'),3
+POST,/forecast/010018,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010018'),2
+POST,/forecast/010001,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010001'),4
+POST,/forecast/010019,HTTPError('500 Server Error: Internal Server Error for url: /forecast/010019'),2

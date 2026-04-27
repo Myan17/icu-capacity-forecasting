@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
@@ -47,7 +48,7 @@ def latest_snapshot(hospital_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/forecast/{hospital_id}")
-def run_forecast(
+async def run_forecast(
     hospital_id: str,
     model: str | None = None,
     db: Session = Depends(get_db),
@@ -78,7 +79,6 @@ def run_forecast(
     latest_capacity = int(df["icu_capacity"].iloc[-1])
     model_preference = model or settings.FORECAST_MODEL
 
-    # Use the ML forecast service
     service = MLForecastService(
         model_preference=model_preference,
         horizon=settings.FORECAST_HORIZON,
@@ -87,8 +87,14 @@ def run_forecast(
         red_threshold=settings.ALERT_OCCUPANCY_RED,
     )
 
+    # ML inference (model fit + predict + MC CI) is CPU-bound and takes 100–300 ms.
+    # Running it in a thread pool keeps the event loop free to handle other requests
+    # concurrently instead of blocking them for the full inference duration.
+    loop = asyncio.get_running_loop()
     try:
-        forecast_steps = service.generate_forecast(df, latest_capacity)
+        forecast_steps = await loop.run_in_executor(
+            None, service.generate_forecast, df, latest_capacity
+        )
     except ValueError as exc:
         return {"message": str(exc), "hospital_id": hospital_id}
 
