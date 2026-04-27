@@ -44,7 +44,7 @@ def log_run(environment) -> None:
         print("[mlflow_reporter] No hospital stats collected — skipping MLflow log.")
         return
 
-    run_duration = round(time.time() - runner.start_time, 1) if runner else 0
+    run_duration = round(time.time() - environment.stats.start_time, 1) if environment.stats.start_time else 0
 
     try:
         with mlflow.start_run():
