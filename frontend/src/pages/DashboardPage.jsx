@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getAlerts,
   getForecasts,
   getLatestSnapshot,
-  runForecast,
+  pollForNewForecast,
+  triggerForecast,
 } from "../api/hospitalApi";
 import { formatDateTime } from "../utils/format";
 import AppShell from "../components/layout/AppShell";
@@ -23,8 +24,13 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [forecasting, setForecasting] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
+
+  // Incremented whenever we switch hospitals or start a new poll, so stale
+  // background polls don't overwrite state after the user has moved on.
+  const pollGenRef = useRef(0);
 
   const latestForecast = useMemo(() => {
     if (!forecasts.length) return null;
@@ -46,8 +52,6 @@ export default function DashboardPage() {
     setError("");
 
     try {
-   
-      await runForecast(selectedHospitalId);
       const [snapshotData, forecastData, alertsData] = await Promise.all([
         getLatestSnapshot(selectedHospitalId),
         getForecasts(selectedHospitalId),
@@ -58,7 +62,7 @@ export default function DashboardPage() {
       setForecasts(forecastData);
       setAlerts(alertsData);
       setLastUpdated(formatDateTime(new Date()));
-    } catch (err) {
+    } catch {
       setError("Could not load dashboard data. Please verify the backend is running.");
     }
   }
@@ -67,18 +71,37 @@ export default function DashboardPage() {
     setRefreshing(true);
     setError("");
 
+    const priorRunId = forecasts[0]?.run_id ?? null;
+    const gen = ++pollGenRef.current;
+
     try {
-      await runForecast(hospitalId);
-      await loadDashboardData(hospitalId);
-    } catch (err) {
-      setError("Could not refresh forecast data.");
-    } finally {
+      await triggerForecast(hospitalId);         // fast 202
+      await loadDashboardData(hospitalId);        // show current data immediately
+    } catch {
+      setError("Could not trigger forecast.");
       setRefreshing(false);
+      return;
     }
+
+    setRefreshing(false);
+    setForecasting(true);
+
+    // Background poll — updates chart when new run_id arrives
+    pollForNewForecast(hospitalId, priorRunId).then((newData) => {
+      if (gen !== pollGenRef.current) return; // user switched hospital
+      if (newData) {
+        setForecasts(newData);
+        setLastUpdated(formatDateTime(new Date()));
+      }
+      setForecasting(false);
+    });
   }
 
   useEffect(() => {
+    pollGenRef.current++; // cancel any in-flight poll from a previous hospital
+
     async function init() {
+      setForecasting(false);
       setLoading(true);
       await loadDashboardData(hospitalId);
       setLoading(false);
@@ -99,6 +122,13 @@ export default function DashboardPage() {
       <div className="page-controls">
         <HospitalSelector value={hospitalId} onChange={setHospitalId} />
       </div>
+
+      {forecasting && (
+        <div className="forecast-updating-banner">
+          <span className="forecast-updating-spinner" />
+          Updating forecast — chart will refresh when results are ready…
+        </div>
+      )}
 
       {loading ? (
         <LoadingState message="Loading dashboard..." />
