@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import os
 import mlflow
 
-mlflow.set_tracking_uri("sqlite:///" + os.path.join(os.path.dirname(__file__), "..", "..", "mlflow.db"))
+mlflow.set_tracking_uri("sqlite:///" + os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "mlflow.db")))
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
