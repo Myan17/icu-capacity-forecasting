@@ -146,7 +146,7 @@ def _safe_float(v, default: float = 0.0) -> float:
         return default
 
 
-_HOSPITAL_METRIC_RE = re.compile(r"^(H\d{3})_(p50_ms|p95_ms|p99_ms|failure_rate|rps)$")
+_HOSPITAL_METRIC_RE = re.compile(r"^(\d{6})_(p50_ms|p95_ms|p99_ms|failure_rate|rps)$")
 _LOAD_TEST_EXPERIMENT = "hospital-load-test"
 
 
