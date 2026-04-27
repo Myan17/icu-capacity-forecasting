@@ -2,7 +2,10 @@ import logging
 import re
 from datetime import datetime, timedelta
 
+import os
 import mlflow
+
+mlflow.set_tracking_uri(os.path.join(os.path.dirname(__file__), "..", "..", "mlruns"))
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
