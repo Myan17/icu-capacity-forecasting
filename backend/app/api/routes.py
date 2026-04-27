@@ -154,6 +154,23 @@ def get_forecasts(hospital_id: str, db: Session = Depends(get_db)):
     return rows
 
 
+@router.get("/hospitals")
+def get_hospitals(db: Session = Depends(get_db)):
+    rows = db.query(Snapshot.hospital_id).distinct().order_by(Snapshot.hospital_id).all()
+    return [r[0] for r in rows]
+
+
+@router.get("/alerts")
+def get_all_alerts(limit: int = 50, db: Session = Depends(get_db)):
+    rows = (
+        db.query(Alert)
+        .order_by(Alert.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return rows
+
+
 @router.get("/alerts/{hospital_id}")
 def get_alerts(hospital_id: str, db: Session = Depends(get_db)):
     rows = (

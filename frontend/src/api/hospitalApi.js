@@ -28,6 +28,16 @@ export async function getAlerts(hospitalId) {
   return response.data;
 }
 
+export async function getHospitals() {
+  const response = await api.get("/hospitals");
+  return response.data;
+}
+
+export async function getAllAlerts(limit = 50) {
+  const response = await api.get(`/alerts?limit=${limit}`);
+  return response.data;
+}
+
 export async function getLoadTestLatest() {
   const response = await api.get("/load-test/latest");
   return response.data;
