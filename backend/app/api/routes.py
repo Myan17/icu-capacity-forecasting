@@ -12,11 +12,18 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from typing import Dict, Any
+
 from app.db.database import get_db
 from app.models.tables import Alert, Forecast, Snapshot
 from app.schemas.snapshot import SnapshotCreate
 from app.services.forecast import MLForecastService
 from app.services.risk import compute_risk
+from pydantic import BaseModel
+
+class LoadTestPayload(BaseModel):
+    metrics: Dict[str, float]
+    tags: Dict[str, str]
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -242,6 +249,15 @@ def get_load_test_latest():
         "overall_rps":          _safe_float(metrics.get("overall_rps", 0)),
         "hospitals":            sorted(hospitals.values(), key=lambda h: h["hospital_id"]),
     }
+
+
+@router.post("/load-test/runs")
+def create_load_test_run(payload: LoadTestPayload):
+    mlflow.set_experiment(_LOAD_TEST_EXPERIMENT)
+    with mlflow.start_run():
+        mlflow.log_metrics(payload.metrics)
+        mlflow.set_tags(payload.tags)
+    return {"status": "ok"}
 
 
 @router.get("/load-test/runs")
