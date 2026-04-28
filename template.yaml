@@ -26,6 +26,50 @@ Parameters:
     Type: Number
     Default: 4
     Description: Number of weeks to forecast ahead
+  ForecastWorkloadTier:
+    Type: String
+    Default: medium
+    AllowedValues: [small, medium, large]
+    Description: >
+      MOS-style hospital workload tier. Drives Lambda memory + timeout via the
+      WorkloadTierMap mapping (Lecture 1: Cloud Resource Management).
+  EnableBatching:
+    Type: String
+    Default: '1'
+    AllowedValues: ['0', '1']
+    Description: Toggle batch forecasting in handler (Lecture 2 / Borg).
+  EnablePriority:
+    Type: String
+    Default: '1'
+    AllowedValues: ['0', '1']
+    Description: Toggle priority-based scheduling (Lecture 2 / Borg).
+  EnableFallback:
+    Type: String
+    Default: '1'
+    AllowedValues: ['0', '1']
+    Description: Toggle baseline fallback when SARIMA/Prophet fits fail.
+  MaxFitAttempts:
+    Type: Number
+    Default: 2
+    Description: Retry budget for the model selector before fallback.
+
+# ── L1 (MOS) workload-tier → Lambda resource mappings ────────────────────────
+# Tier-aware sizing lets us match memory + time budget to the hospital workload
+# instead of paying for a one-size-fits-all 2 GB / 600 s Lambda.
+Mappings:
+  WorkloadTierMap:
+    small:
+      MemoryMB: 1024
+      TimeoutSec: 180
+      McSamples: 100
+    medium:
+      MemoryMB: 2048
+      TimeoutSec: 360
+      McSamples: 300
+    large:
+      MemoryMB: 3008
+      TimeoutSec: 600
+      McSamples: 500
 
 Globals:
   Function:
@@ -211,6 +255,8 @@ Resources:
   # Forecast: Docker container (heavier ML deps — Prophet, statsmodels, scikit-learn)
   #   Loads snapshot history from DynamoDB → runs BestModelSelector →
   #   writes forecasts with intervals → writes probabilistic alerts (deduped)
+  #   Memory + timeout are sized via the WorkloadTierMap (L1: MOS), and
+  #   retry/fallback toggles come from parameters above (L2: Borg).
   ForecastFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -220,8 +266,12 @@ Resources:
     Properties:
       FunctionName: !Sub hospital-forecast-${Environment}
       PackageType: Image
-      MemorySize: 2048
-      Timeout: 600
+      MemorySize: !FindInMap [WorkloadTierMap, !Ref ForecastWorkloadTier, MemoryMB]
+      Timeout:    !FindInMap [WorkloadTierMap, !Ref ForecastWorkloadTier, TimeoutSec]
+      Tags:
+        WorkloadTier: !Ref ForecastWorkloadTier
+        WorkloadKind: cpu_bound
+        Project:      hospital-forecasting
       Description: >
         Runs ML forecasting pipeline (Baseline/SARIMA/Prophet auto-selector),
         outputs confidence intervals and probability-of-breach scores.
@@ -236,6 +286,11 @@ Resources:
           ALERT_OCCUPANCY_RED:      !Ref AlertOccupancyRed
           BREACH_PROB_THRESHOLD:    !Ref BreachProbabilityThreshold
           FORECAST_HORIZON_WEEKS:   !Ref ForecastHorizonWeeks
+          ENABLE_BATCHING:          !Ref EnableBatching
+          ENABLE_PRIORITY:          !Ref EnablePriority
+          ENABLE_FALLBACK:          !Ref EnableFallback
+          MAX_FIT_ATTEMPTS:         !Ref MaxFitAttempts
+          MC_SAMPLES_DEFAULT:       !FindInMap [WorkloadTierMap, !Ref ForecastWorkloadTier, McSamples]
           POWERTOOLS_SERVICE_NAME:  hospital-forecasting
           LOG_LEVEL:                INFO
       Policies:
@@ -269,6 +324,22 @@ Resources:
             DeadLetterConfig:
               Type: SQS
               Destination: !GetAtt ForecastDLQ.Arn
+        # L4 / FedAT-style staggered async cadence: Tier-2 hospitals get a
+        # second weekly run on Thursday so faster-tier hospitals refresh more
+        # often than slower ones without doubling the cron cost.
+        Tier2RefreshForecast:
+          Type: ScheduleV2
+          Properties:
+            Name: !Sub hospital-forecast-tier2-${Environment}
+            Description: Mid-week async refresh for Tier-2 hospitals (FedAT pattern)
+            ScheduleExpression: "cron(0 8 ? * THU *)"
+            RetryPolicy:
+              MaximumRetryAttempts: 1
+            DeadLetterConfig:
+              Type: SQS
+              Destination: !GetAtt ForecastDLQ.Arn
+            Input: |
+              {"priority": true, "tier_filter": "tier_2"}
 
   # API: thin read layer — API Gateway HTTP API → Lambda → DynamoDB
   #      POST /forecast enqueues to ForecastQueue (async) and returns 202.

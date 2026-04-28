@@ -56,6 +56,14 @@ from shared.dynamo import (
     snapshot_pk,
     snapshots_table,
 )
+from shared.hospital_tiers import profile_hospital, recommended_resources
+from shared.priority_queue import HospitalSignal, PriorityScheduler
+from shared.workload_metrics import (
+    WorkloadKind,
+    WorkloadProfiler,
+    detect_bottleneck,
+    emit_powertools_metrics,
+)
 from shared.models import ForecastEvent
 from lambdas.forecast.forecast_utils import breach_prob, risk_label, mc_ci
 
@@ -69,7 +77,13 @@ YELLOW_THRESHOLD = float(os.environ.get("ALERT_OCCUPANCY_YELLOW", 0.75))
 RED_THRESHOLD    = float(os.environ.get("ALERT_OCCUPANCY_RED", 0.90))
 BREACH_THRESHOLD = float(os.environ.get("BREACH_PROB_THRESHOLD", 0.60))
 HORIZON          = int(os.environ.get("FORECAST_HORIZON_WEEKS", 4))
-MC_SAMPLES       = 500   # Monte Carlo draws for confidence intervals on non-Prophet models
+MC_SAMPLES       = 500   # Default; overridden per-hospital by tier
+
+# L2 retry / fallback
+MAX_FIT_ATTEMPTS    = int(os.environ.get("MAX_FIT_ATTEMPTS", 2))
+ENABLE_FALLBACK     = os.environ.get("ENABLE_FALLBACK", "1") == "1"
+ENABLE_BATCHING     = os.environ.get("ENABLE_BATCHING", "1") == "1"
+ENABLE_PRIORITY     = os.environ.get("ENABLE_PRIORITY", "1") == "1"
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -78,15 +92,37 @@ MC_SAMPLES       = 500   # Monte Carlo draws for confidence intervals on non-Pro
 @tracer.capture_lambda_handler
 @metrics.log_metrics(capture_cold_start_metric=True)
 def lambda_handler(event: dict, context: Any) -> dict:
-    # SQS trigger: one record per hospital (BatchSize=1 in template.yaml).
-    # Re-raise on error so SQS retries the message (up to maxReceiveCount=3)
-    # before routing to the DLQ.
+    """Entry point for the Forecast Lambda.
+
+    Two execution paths:
+      * **SQS-triggered** — one record per hospital (BatchSize=1 in
+        template.yaml). The per-hospital handler re-raises on failure so SQS
+        retries the message (up to maxReceiveCount=3) before routing to DLQ.
+      * **Direct invocation** — EventBridge weekly schedule or manual
+        ``hospital_ids: [...]`` payload. With ``priority=true`` (default) the
+        hospitals are reordered by current occupancy + last breach probability
+        so the most urgent ones run first within the 600s budget.
+    """
+    event = event or {}
+
     if "Records" in event:
         return _handle_sqs_event(event["Records"])
 
-    # Direct invocation: EventBridge weekly schedule or manual invoke.
-    payload = ForecastEvent(**event) if event else ForecastEvent()
-    hospital_ids = _resolve_hospital_ids(payload.hospital_id)
+    payload = ForecastEvent(**{k: v for k, v in event.items() if k in {"hospital_id"}})
+
+    explicit_ids = event.get("hospital_ids")
+    if explicit_ids:
+        hospital_ids = list(explicit_ids)
+    else:
+        hospital_ids = _resolve_hospital_ids(payload.hospital_id)
+
+    use_priority = ENABLE_PRIORITY and bool(event.get("priority", True))
+    if use_priority and len(hospital_ids) > 1:
+        try:
+            hospital_ids = _prioritise_hospitals(hospital_ids)
+        except Exception as exc:
+            logger.warning("Priority ordering failed; falling back to input order",
+                           extra={"error": str(exc)})
 
     results = []
     for hid in hospital_ids:
@@ -97,7 +133,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
             logger.error("Forecast failed", extra={"hospital_id": hid, "error": str(exc)})
             results.append({"hospital_id": hid, "status": "error", "error": str(exc)})
 
-    return {"status": "complete", "hospitals": results}
+    return {
+        "status":         "complete",
+        "hospitals":      results,
+        "batched":        len(hospital_ids) > 1,
+        "priority_used":  use_priority,
+    }
 
 
 def _handle_sqs_event(records: list[dict]) -> dict:
@@ -123,29 +164,102 @@ def _resolve_hospital_ids(hospital_id: str | None) -> list[str]:
     return [pk.replace("HOSPITAL#", "") for pk in pks if pk.startswith("HOSPITAL#")]
 
 
+def _prioritise_hospitals(hospital_ids: list[str]) -> list[str]:
+    """L2: order by current occupancy ratio and recent breach probability.
+
+    Reads the most recent snapshot + cached forecast for each hospital so it
+    can compute the priority score without re-running the model.
+    """
+    sched = PriorityScheduler()
+    for hid in hospital_ids:
+        items = query_recent_snapshots(hid, limit=8)
+        df = _items_to_dataframe(items) if items else pd.DataFrame()
+        profile = profile_hospital(hid, df)
+
+        occ_ratio = 0.0
+        if not df.empty:
+            cap = float(df["icu_capacity"].iloc[-1] or 1)
+            occ_ratio = float(df["icu_occupied"].iloc[-1]) / max(cap, 1.0)
+        sched.submit(HospitalSignal(profile=profile, occupancy_ratio=occ_ratio))
+    return [item.hospital_id for item in sched.drain()]
+
+
 # ── Per-hospital pipeline ─────────────────────────────────────────────────────
 
 @tracer.capture_method
 def _run_forecast_for_hospital(hospital_id: str) -> dict:
-    logger.info("Starting forecast", extra={"hospital_id": hospital_id})
+    """Per-hospital forecast pipeline with workload profiling + retry/fallback.
 
-    raw_items = query_recent_snapshots(hospital_id, limit=52)
+    Stages:
+      load (IO) → select_model (CPU, retry+fallback) → generate (CPU)
+      → write_forecasts (IO) → write_alerts (IO)
+
+    Each stage is timed and tagged so a single CloudWatch metric stream tells
+    us which stage dominates wall time and whether the workload is CPU- or
+    I/O-bound (Lecture 1 / MOS).
+    """
+    logger.info("Starting forecast", extra={"hospital_id": hospital_id})
+    profiler = WorkloadProfiler()
+
+    with profiler.stage("load_snapshots", WorkloadKind.IO):
+        raw_items = query_recent_snapshots(hospital_id, limit=52)
     if len(raw_items) < 4:
         return {"hospital_id": hospital_id, "status": "insufficient_data", "rows": len(raw_items)}
 
-    df = _items_to_dataframe(raw_items)
-    latest_capacity = int(df["icu_capacity"].iloc[-1])
+    with profiler.stage("frame_construction", WorkloadKind.MIXED):
+        df = _items_to_dataframe(raw_items)
+        latest_capacity = int(df["icu_capacity"].iloc[-1])
 
-    model, model_name = _select_model(hospital_id, df)
-    steps = _generate_forecast(model, model_name, df)
+    with profiler.stage("hospital_profile", WorkloadKind.CPU):
+        profile = profile_hospital(hospital_id, df)
+        budget = recommended_resources(profile)
+
+    with profiler.stage("select_model", WorkloadKind.CPU):
+        _LAST_FALLBACK["used"] = False
+        model, model_name = _select_model(hospital_id, df)
+        fallback_used = bool(_LAST_FALLBACK.get("used", False))
+
+    with profiler.stage("generate_forecast", WorkloadKind.CPU):
+        steps = _generate_forecast(model, model_name, df, mc_samples=budget["mc_samples"])
 
     run_id = uuid.uuid4().hex[:8]
-    _write_forecasts(hospital_id, run_id, model_name, steps, latest_capacity)
-    _write_probabilistic_alerts(hospital_id, steps, latest_capacity)
+    with profiler.stage("write_forecasts", WorkloadKind.IO):
+        _write_forecasts(hospital_id, run_id, model_name, steps, latest_capacity)
+    with profiler.stage("write_alerts", WorkloadKind.IO):
+        _write_probabilistic_alerts(hospital_id, steps, latest_capacity)
+
+    bottleneck = detect_bottleneck(profiler.report())
+    summary = profiler.report().summary()
 
     metrics.add_metric(name="ForecastsGenerated", unit=MetricUnit.Count, value=1)
-    logger.info("Forecast complete", extra={"hospital_id": hospital_id, "model": model_name, "run_id": run_id})
-    return {"hospital_id": hospital_id, "status": "success", "model": model_name, "run_id": run_id}
+    if fallback_used:
+        metrics.add_metric(name="ModelFallbackUsed", unit=MetricUnit.Count, value=1)
+    metrics.add_metadata(key="workload_tier", value=profile.workload_tier.value)
+    metrics.add_metadata(key="bottleneck", value=bottleneck)
+    emit_powertools_metrics(profiler.report())
+
+    logger.info(
+        "Forecast complete",
+        extra={
+            "hospital_id":    hospital_id,
+            "model":          model_name,
+            "run_id":         run_id,
+            "fallback_used":  fallback_used,
+            "workload_tier":  profile.workload_tier.value,
+            "bottleneck":     bottleneck,
+            "stage_summary":  summary["wall_by_kind"],
+        },
+    )
+    return {
+        "hospital_id":   hospital_id,
+        "status":        "success",
+        "model":         model_name,
+        "run_id":        run_id,
+        "workload_tier": profile.workload_tier.value,
+        "bottleneck":    bottleneck,
+        "fallback_used": fallback_used,
+        "wall_ms":       summary["total_wall_ms"],
+    }
 
 
 def _items_to_dataframe(items: list[dict]) -> pd.DataFrame:
@@ -163,22 +277,77 @@ def _items_to_dataframe(items: list[dict]) -> pd.DataFrame:
 
 # ── Model selection ───────────────────────────────────────────────────────────
 
+# Module-level scratch — populated by ``_select_model`` whenever the
+# fallback path is taken so the handler can record it as a CloudWatch metric.
+_LAST_FALLBACK: dict[str, Any] = {"used": False}
+
+
 def _select_model(hospital_id: str, df: pd.DataFrame):
+    """Public selector entry point.
+
+    Performs L2 retry + fallback to baseline. Returns ``(model, name)`` for
+    backward compatibility with existing tests that monkeypatch this function.
+    Whether the fallback path was taken is recorded in ``_LAST_FALLBACK``.
+    """
+    model, name, fallback_used = _select_model_with_fallback(hospital_id, df)
+    _LAST_FALLBACK["used"] = fallback_used
+    return model, name
+
+
+def _select_model_with_fallback(
+    hospital_id: str, df: pd.DataFrame
+) -> tuple[Any, str, bool]:
+    """L2 retry-and-fallback. Returns ``(model, name, fallback_used)``.
+
+    Strategy:
+      1. Try the S3 artifact first (fast path).
+      2. Otherwise, run BestModelSelector with up to ``MAX_FIT_ATTEMPTS`` tries.
+      3. If selection still fails and ``ENABLE_FALLBACK`` is on, fall back to
+         a Baseline forecaster fit on the raw series. The handler logs the
+         fallback and emits a ``ModelFallbackUsed`` CloudWatch metric so we
+         can alert on degraded mode.
+    """
     artifact = _load_artifact_from_s3(hospital_id)
     if artifact:
-        logger.info("Using pre-trained artifact", extra={"hospital_id": hospital_id, "model": artifact["model_name"]})
-        return artifact["model"], artifact["model_name"]
+        logger.info(
+            "Using pre-trained artifact",
+            extra={"hospital_id": hospital_id, "model": artifact["model_name"]},
+        )
+        return artifact["model"], artifact["model_name"], False
 
-    logger.info("Running BestModelSelector", extra={"hospital_id": hospital_id})
-    selector = BestModelSelector(
-        metric=DEFAULT_CONFIG.selection_metric,
-        horizon=min(DEFAULT_CONFIG.test_size, max(len(df) // 4, 2)),
-        timestamp_col="timestamp",
-        target_col="icu_occupied",
-        frequency="W",
+    last_exc: Exception | None = None
+    for attempt in range(1, max(MAX_FIT_ATTEMPTS, 1) + 1):
+        try:
+            logger.info(
+                "Running BestModelSelector",
+                extra={"hospital_id": hospital_id, "attempt": attempt},
+            )
+            selector = BestModelSelector(
+                metric=DEFAULT_CONFIG.selection_metric,
+                horizon=min(DEFAULT_CONFIG.test_size, max(len(df) // 4, 2)),
+                timestamp_col="timestamp",
+                target_col="icu_occupied",
+                frequency="W",
+            )
+            result = selector.select_best_model(df.copy())
+            return result.best_model, result.best_model_name, False
+        except Exception as exc:  # noqa: BLE001 — we want any failure
+            last_exc = exc
+            logger.warning(
+                "Selector attempt failed",
+                extra={"hospital_id": hospital_id, "attempt": attempt, "error": str(exc)},
+            )
+
+    if not ENABLE_FALLBACK:
+        raise RuntimeError(f"BestModelSelector failed after retries: {last_exc}") from last_exc
+
+    logger.error(
+        "All selector attempts failed; falling back to baseline",
+        extra={"hospital_id": hospital_id, "error": str(last_exc)},
     )
-    result = selector.select_best_model(df.copy())
-    return result.best_model, result.best_model_name
+    fallback = BaselineForecaster(target_col="icu_occupied")
+    fallback.fit(df)
+    return fallback, "baseline", True
 
 
 def _load_artifact_from_s3(hospital_id: str):
@@ -196,10 +365,16 @@ def _load_artifact_from_s3(hospital_id: str):
 
 # ── Forecast + intervals ──────────────────────────────────────────────────────
 
-def _generate_forecast(model, model_name: str, df: pd.DataFrame) -> list[dict]:
+def _generate_forecast(
+    model,
+    model_name: str,
+    df: pd.DataFrame,
+    *,
+    mc_samples: int | None = None,
+) -> list[dict]:
     if isinstance(model, ProphetForecaster):
         return _prophet_forecast(model, df)
-    return _mc_forecast(model, model_name, df)
+    return _mc_forecast(model, model_name, df, mc_samples=mc_samples or MC_SAMPLES)
 
 
 def _prophet_forecast(model: ProphetForecaster, df: pd.DataFrame) -> list[dict]:
@@ -223,8 +398,18 @@ def _prophet_forecast(model: ProphetForecaster, df: pd.DataFrame) -> list[dict]:
     return steps
 
 
-def _mc_forecast(model, model_name: str, df: pd.DataFrame) -> list[dict]:
-    """Monte Carlo bootstrap for confidence intervals on Baseline/SARIMA."""
+def _mc_forecast(
+    model,
+    model_name: str,
+    df: pd.DataFrame,
+    *,
+    mc_samples: int = MC_SAMPLES,
+) -> list[dict]:
+    """Monte Carlo bootstrap for CIs on Baseline/SARIMA.
+
+    ``mc_samples`` is sized per workload tier: smaller hospitals get fewer
+    draws so the Lambda finishes within their tier's time budget.
+    """
     series = df["icu_occupied"].values.astype(float)
     preds = np.array(model.predict(HORIZON), dtype=float)
 
@@ -236,7 +421,7 @@ def _mc_forecast(model, model_name: str, df: pd.DataFrame) -> list[dict]:
     now = datetime.now(timezone.utc)
     steps = []
     for i, yhat in enumerate(preds):
-        lo, hi = mc_ci(residuals, float(yhat), seed=42 + i)
+        lo, hi = mc_ci(residuals, float(yhat), seed=42 + i, n_samples=mc_samples)
         steps.append({
             "forecast_time": now + timedelta(weeks=i + 1),
             "yhat":          float(yhat),
