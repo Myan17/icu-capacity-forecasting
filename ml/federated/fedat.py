@@ -24,8 +24,8 @@ from typing import Any, Dict, List, Mapping
 
 import numpy as np
 
-from ml.federated.aggregator import FederatedAggregator, GlobalModelState
 from ml.federated.client import ClientUpdate, FederatedClient, init_global_params
+from ml.federated.parameter_aggregator import GlobalModelState, ParameterAggregator
 from shared.hospital_tiers import HospitalProfile, TiFLTier
 
 
@@ -158,7 +158,7 @@ class FedATCoordinator:
                 )
                 continue
 
-            aggregator = FederatedAggregator(
+            aggregator = ParameterAggregator(
                 strategy=strategy,
                 external_weights=weights_used if strategy == "weighted" else None,
             )
