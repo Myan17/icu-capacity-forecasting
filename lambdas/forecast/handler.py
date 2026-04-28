@@ -45,11 +45,26 @@ from ml.models.prophet_model import ProphetForecaster
 from ml.models.sarima_model import SarimaForecaster
 from ml.model_selection.selector import BestModelSelector
 
+# Spec-conformant distributed-ML modules (L1 → L4):
+from ml.workload.profiler import (
+    Tier as SpecTier,
+    WorkloadProfile as SpecWorkloadProfile,
+    WorkloadProfiler as SpecWorkloadProfiler,
+)
+from ml.scheduler.priority_queue import TierScheduler
+from ml.parallel.executor import ParallelExecutor
+from ml.federated.round_tracker import RoundTracker
+from ml.federated.local_trainer import LocalTrainer
+from ml.federated.aggregator import FederatedAggregator
+
 from shared.dynamo import (
     alert_dedupe_key,
     alert_exists,
     alert_sk,
     alerts_table,
+    fl_round_pk,
+    fl_round_sk,
+    fl_rounds_table,
     forecast_sk,
     forecasts_table,
     query_recent_snapshots,
@@ -84,6 +99,8 @@ MAX_FIT_ATTEMPTS    = int(os.environ.get("MAX_FIT_ATTEMPTS", 2))
 ENABLE_FALLBACK     = os.environ.get("ENABLE_FALLBACK", "1") == "1"
 ENABLE_BATCHING     = os.environ.get("ENABLE_BATCHING", "1") == "1"
 ENABLE_PRIORITY     = os.environ.get("ENABLE_PRIORITY", "1") == "1"
+ENABLE_FL           = os.environ.get("ENABLE_FL", "0") == "1"
+FORECAST_WORKERS    = max(int(os.environ.get("FORECAST_WORKERS", 4)), 1)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -99,9 +116,34 @@ def lambda_handler(event: dict, context: Any) -> dict:
         template.yaml). The per-hospital handler re-raises on failure so SQS
         retries the message (up to maxReceiveCount=3) before routing to DLQ.
       * **Direct invocation** — EventBridge weekly schedule or manual
-        ``hospital_ids: [...]`` payload. With ``priority=true`` (default) the
-        hospitals are reordered by current occupancy + last breach probability
-        so the most urgent ones run first within the 600s budget.
+        ``hospital_ids: [...]`` payload, which fans out through the
+        distributed-ML pipeline below.
+
+    Direct-invocation pipeline (Lectures 1 → 4):
+
+      ┌──────────────────────────┐
+      │ resolve hospital_ids      │ from event or DynamoDB scan
+      └─────────────┬────────────┘
+                    ▼
+      ┌──────────────────────────┐
+      │ WorkloadProfiler         │ L1: classify each hospital (S/M/L)
+      └─────────────┬────────────┘
+                    ▼
+      ┌──────────────────────────┐
+      │ TierScheduler            │ L2: priority sort + bin-pack SMALL
+      └─────────────┬────────────┘
+                    ▼
+      ┌──────────────────────────┐
+      │ ParallelExecutor         │ L3: ThreadPool over JobBatches
+      └─────────────┬────────────┘
+                    ▼
+      ┌──────────────────────────┐
+      │ _run_fl_aggregation      │ L4: FedAvg (ENABLE_FL + all-hospitals path)
+      └──────────────────────────┘
+
+    Direct invocations accept ``hospital_ids: [...]`` for explicit batches,
+    a single ``hospital_id``, or no key at all (in which case we scan for
+    every hospital with snapshots and run the full pipeline plus FL).
     """
     event = event or {}
 
@@ -117,27 +159,41 @@ def lambda_handler(event: dict, context: Any) -> dict:
         hospital_ids = _resolve_hospital_ids(payload.hospital_id)
 
     use_priority = ENABLE_PRIORITY and bool(event.get("priority", True))
-    if use_priority and len(hospital_ids) > 1:
-        try:
-            hospital_ids = _prioritise_hospitals(hospital_ids)
-        except Exception as exc:
-            logger.warning("Priority ordering failed; falling back to input order",
-                           extra={"error": str(exc)})
 
-    results = []
+    profiles, last_forecast_ages = _build_scheduling_profiles(hospital_ids)
+    if not use_priority:
+        last_forecast_ages = {}
+
+    batches = TierScheduler().schedule(profiles, last_forecast_ages=last_forecast_ages)
+    job_results = ParallelExecutor(max_workers=FORECAST_WORKERS).run(
+        batches, run_fn=_run_forecast_for_hospital,
+    )
+
+    scheduled_ids = {hid for job in job_results for hid in job.hospital_ids}
+    results: list[dict] = [r for job in job_results for r in job.results]
+
+    # Hospitals with no snapshots at all (or that failed _build_scheduling_profiles)
+    # never reach the executor; surface them as insufficient_data so callers
+    # still get one record per requested hospital_id.
     for hid in hospital_ids:
+        if hid not in scheduled_ids:
+            results.append({"hospital_id": hid, "status": "insufficient_data", "rows": 0})
+
+    parallelism_efficiency = job_results[0].parallelism_efficiency if job_results else 0.0
+
+    if ENABLE_FL and not payload.hospital_id and not explicit_ids:
         try:
-            result = _run_forecast_for_hospital(hid)
-            results.append(result)
-        except Exception as exc:
-            logger.error("Forecast failed", extra={"hospital_id": hid, "error": str(exc)})
-            results.append({"hospital_id": hid, "status": "error", "error": str(exc)})
+            _run_fl_aggregation(hospital_ids)
+        except Exception as exc:  # noqa: BLE001 — FL is best-effort
+            logger.warning("FL aggregation failed", extra={"error": str(exc)})
 
     return {
-        "status":         "complete",
-        "hospitals":      results,
-        "batched":        len(hospital_ids) > 1,
-        "priority_used":  use_priority,
+        "status":                 "complete",
+        "hospitals":              results,
+        "batched":                len(hospital_ids) > 1,
+        "priority_used":          use_priority,
+        "parallelism_efficiency": parallelism_efficiency,
+        "num_batches":            len(batches),
     }
 
 
@@ -165,10 +221,11 @@ def _resolve_hospital_ids(hospital_id: str | None) -> list[str]:
 
 
 def _prioritise_hospitals(hospital_ids: list[str]) -> list[str]:
-    """L2: order by current occupancy ratio and recent breach probability.
+    """L2 (legacy): order by current occupancy ratio.
 
-    Reads the most recent snapshot + cached forecast for each hospital so it
-    can compute the priority score without re-running the model.
+    Kept for backwards compatibility — the new ``TierScheduler`` pipeline now
+    handles ordering through the ``last_forecast_ages`` dict produced by
+    :func:`_build_scheduling_profiles`.
     """
     sched = PriorityScheduler()
     for hid in hospital_ids:
@@ -182,6 +239,114 @@ def _prioritise_hospitals(hospital_ids: list[str]) -> list[str]:
             occ_ratio = float(df["icu_occupied"].iloc[-1]) / max(cap, 1.0)
         sched.submit(HospitalSignal(profile=profile, occupancy_ratio=occ_ratio))
     return [item.hospital_id for item in sched.drain()]
+
+
+# ── Spec-conformant scheduling pipeline (Lectures 1 + 2) ──────────────────────
+
+_SPEC_PROFILER = SpecWorkloadProfiler()
+
+
+def _build_scheduling_profiles(
+    hospital_ids: list[str],
+) -> tuple[list[SpecWorkloadProfile], dict[str, float]]:
+    """Build per-hospital ``WorkloadProfile`` + staleness ages for ``TierScheduler``.
+
+    The "age" we feed the scheduler is the current occupancy ratio: a
+    higher ratio means the hospital's last forecast is *more* out of date in
+    a risk-weighted sense, so the scheduler runs that hospital first within
+    its tier. This preserves the existing "high-occupancy first" behaviour
+    while letting the tier ordering dominate (LARGE before MEDIUM before
+    SMALL).
+
+    Hospitals that have never reported snapshots are left out of the
+    schedule — the caller surfaces them as ``insufficient_data`` afterwards.
+    """
+    profiles: list[SpecWorkloadProfile] = []
+    ages: dict[str, float] = {}
+    for hid in hospital_ids:
+        try:
+            raw_items = query_recent_snapshots(hid, limit=52)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Snapshot query failed; skipping hospital",
+                extra={"hospital_id": hid, "error": str(exc)},
+            )
+            continue
+        if not raw_items:
+            continue
+        df = _items_to_dataframe(raw_items)
+        profiles.append(_SPEC_PROFILER.profile(hid, df))
+
+        try:
+            cap = float(df["icu_capacity"].iloc[-1] or 1)
+            ages[hid] = float(df["icu_occupied"].iloc[-1]) / max(cap, 1.0)
+        except Exception:
+            ages[hid] = 0.0
+
+    return profiles, ages
+
+
+def _run_fl_aggregation(hospital_ids: list[str]) -> None:
+    """L4: run one FL round across all hospitals (local train + FedAvg).
+
+    Each hospital trains locally, exports a small weight dict, and uploads it
+    to S3; the aggregator then averages the dicts and writes the global model
+    + a DynamoDB round record. Best-effort — failures are logged and don't
+    fail the broader forecast invocation.
+    """
+    trainer = LocalTrainer(s3_client=S3, data_bucket=DATA_BUCKET)
+    aggregator = FederatedAggregator(s3_client=S3, data_bucket=DATA_BUCKET)
+    tracker = RoundTracker()
+
+    weight_dicts: list[dict[str, Any]] = []
+    for hid in hospital_ids:
+        try:
+            raw_items = query_recent_snapshots(hid, limit=52)
+            if len(raw_items) < 4:
+                continue
+            df = _items_to_dataframe(raw_items)
+            spec_profile = _SPEC_PROFILER.profile(hid, df)
+            if not tracker.should_participate(spec_profile.tier):
+                continue
+            weights = trainer.train_and_extract_weights(
+                hid, df, round_n=tracker.current_round,
+            )
+            weight_dicts.append(weights)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "FL local training failed",
+                extra={"hospital_id": hid, "error": str(exc)},
+            )
+
+    if not weight_dicts:
+        logger.info("FL: no eligible hospitals this round; skipping aggregation")
+        return
+
+    global_model = aggregator.aggregate(
+        round_n=tracker.current_round, weight_dicts=weight_dicts,
+    )
+    logger.info("FL aggregation complete", extra={"global_model": global_model})
+
+    # Persist a compact round record so we can build a convergence chart later.
+    try:
+        fl_rounds_table().put_item(Item={
+            "pk":                fl_round_pk(),
+            "sk":                fl_round_sk(tracker.current_round),
+            "round":             int(tracker.current_round),
+            "num_clients":       int(global_model.get("num_clients", 0)),
+            "total_rows":        int(global_model.get("total_rows", 0)),
+            "dominant_model":    str(global_model.get("dominant_model", "")),
+            "global_last_value": Decimal(
+                str(round(float(global_model.get("global_last_value", 0.0)), 4))
+            ),
+            "created_at":        datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("FL round record write failed", extra={"error": str(exc)})
+
+    metrics.add_metric(
+        name="FLRoundsCompleted", unit=MetricUnit.Count, value=1,
+    )
 
 
 # ── Per-hospital pipeline ─────────────────────────────────────────────────────

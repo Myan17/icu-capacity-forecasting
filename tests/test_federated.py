@@ -5,18 +5,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ml.federated.aggregator import (
-    FederatedAggregator,
-    GlobalModelState,
-    fedavg,
-    weighted_fedavg,
-)
 from ml.federated.client import (
     ClientUpdate,
     FederatedClient,
     init_global_params,
 )
 from ml.federated.fedat import FedATCoordinator, tier_summary
+from ml.federated.parameter_aggregator import (
+    GlobalModelState,
+    ParameterAggregator,
+    fedavg,
+    weighted_fedavg,
+)
 from shared.hospital_tiers import profile_hospital
 
 
@@ -75,7 +75,7 @@ def test_weighted_fedavg_uses_external_weights():
 
 def test_fedavgm_velocity_grows_with_consistent_direction():
     state = GlobalModelState(theta=np.zeros(4), velocity=np.zeros(4))
-    agg = FederatedAggregator(strategy="fedavgm", momentum=0.9)
+    agg = ParameterAggregator(strategy="fedavgm", momentum=0.9)
     updates = [ClientUpdate("a", np.array([1.0, 0, 0, 0]), num_samples=10, local_loss=1.0, duration_ms=0)]
     new_state = agg.aggregate(state, updates)
     assert new_state.theta[0] > state.theta[0]

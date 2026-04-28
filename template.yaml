@@ -52,6 +52,18 @@ Parameters:
     Type: Number
     Default: 2
     Description: Retry budget for the model selector before fallback.
+  EnableFL:
+    Type: String
+    Default: '0'
+    AllowedValues: ['0', '1']
+    Description: >
+      Toggle the FL aggregation hook in the forecast Lambda's all-hospitals
+      path (Lecture 4 / Federated Learning). Off by default so per-hospital
+      runs don't pay the extra round-trip.
+  ForecastWorkers:
+    Type: Number
+    Default: 4
+    Description: Thread-pool size for the ParallelExecutor (Lecture 3).
 
 # ── L1 (MOS) workload-tier → Lambda resource mappings ────────────────────────
 # Tier-aware sizing lets us match memory + time budget to the hospital workload
@@ -82,6 +94,7 @@ Globals:
         SNAPSHOTS_TABLE: !Ref SnapshotsTable
         FORECASTS_TABLE: !Ref ForecastsTable
         ALERTS_TABLE:    !Ref AlertsTable
+        FL_ROUNDS_TABLE: !Ref FLRoundsTable
         DATA_BUCKET:     !Ref HospitalDataBucket
         ENVIRONMENT:     !Ref Environment
         ALERT_OCCUPANCY_YELLOW:   !Ref AlertOccupancyYellow
@@ -166,6 +179,29 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Sub hospital-alerts-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: hospital-forecasting
+
+  # ── Federated Learning rounds ──────────────────────────────────────────────
+  # One record per FL round for later analytics; written by the forecast
+  # Lambda's FL aggregation hook (Lecture 4: Federated Learning).
+  # Key design: PK = FL#GLOBAL              SK = ROUND#{round_n:06d}
+  FLRoundsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub hospital-forecasting-fl-rounds-${Environment}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: pk
@@ -289,19 +325,26 @@ Resources:
           ENABLE_BATCHING:          !Ref EnableBatching
           ENABLE_PRIORITY:          !Ref EnablePriority
           ENABLE_FALLBACK:          !Ref EnableFallback
+          ENABLE_FL:                !Ref EnableFL
           MAX_FIT_ATTEMPTS:         !Ref MaxFitAttempts
+          FORECAST_WORKERS:         !Ref ForecastWorkers
           MC_SAMPLES_DEFAULT:       !FindInMap [WorkloadTierMap, !Ref ForecastWorkloadTier, McSamples]
+          FL_ROUNDS_TABLE:          !Ref FLRoundsTable
           POWERTOOLS_SERVICE_NAME:  hospital-forecasting
           LOG_LEVEL:                INFO
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref HospitalDataBucket
+        - S3WritePolicy:
+            BucketName: !Ref HospitalDataBucket   # FL: upload per-round weight + global model JSON
         - DynamoDBReadPolicy:
             TableName: !Ref SnapshotsTable
         - DynamoDBWritePolicy:
             TableName: !Ref ForecastsTable
         - DynamoDBWritePolicy:
             TableName: !Ref AlertsTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref FLRoundsTable
         - SQSPollerPolicy:
             QueueName: !GetAtt ForecastQueue.QueueName
       Events:
@@ -487,6 +530,8 @@ Outputs:
     Value: !Ref ForecastsTable
   AlertsTableName:
     Value: !Ref AlertsTable
+  FLRoundsTableName:
+    Value: !Ref FLRoundsTable
 
   IngestFunctionArn:
     Value: !GetAtt IngestFunction.Arn

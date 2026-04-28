@@ -42,6 +42,26 @@ def alerts_table():
     return _table("ALERTS_TABLE")
 
 
+# ── Federated Learning ────────────────────────────────────────────────────────
+
+def fl_rounds_table():
+    """DynamoDB table that stores one record per FL round (pk=FL#GLOBAL).
+
+    Created by template.yaml::FLRoundsTable. Used by the forecast Lambda's
+    FL aggregation hook to persist per-round metadata (num_clients, dominant
+    model, total rows) for later analytics.
+    """
+    return _table("FL_ROUNDS_TABLE")
+
+
+def fl_round_pk() -> str:
+    return "FL#GLOBAL"
+
+
+def fl_round_sk(round_n: int) -> str:
+    return f"ROUND#{int(round_n):06d}"
+
+
 # ── Key builders ──────────────────────────────────────────────────────────────
 
 def snapshot_pk(hospital_id: str) -> str:

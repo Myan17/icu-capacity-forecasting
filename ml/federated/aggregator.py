@@ -1,144 +1,73 @@
-"""Federated aggregation strategies.
+"""FederatedAggregator — FedAvg over per-hospital weight dicts (L4).
 
-Implements three flavours used in the FL literature:
+Spec: docs/superpowers/specs/2026-04-27-distributed-ml-features-design.md
 
-  * ``fedavg``           — McMahan et al. 2017: average client params weighted
-                            by sample count.
-  * ``weighted_fedavg``  — apply a custom per-client weight (e.g. inverse
-                            variance, fairness, FedAT staleness).
-  * ``fedavg_with_momentum`` (FedAvgM) — keep a running velocity term across
-                            rounds; useful for noisy / heterogeneous fleets.
+This is the *spec-conformant* aggregator used by the forecast Lambda's FL
+hook. It takes the list of per-hospital weight dicts produced by
+:class:`ml.federated.local_trainer.LocalTrainer` and computes the FedAvg
+global model:
 
-All strategies produce a new :class:`GlobalModelState` containing the
-aggregated parameter vector and a tiny history dict for diagnostics.
+    global_last_value = Σ (n_i / N_total) * local_last_value_i
+
+It also picks the dominant model name by total training rows, returns the
+client count + total rows for diagnostics, and (when configured with an S3
+client + bucket) uploads the global model to ``fl/global_model.json``.
+
+The numpy-θ aggregator used by the FedAT simulator now lives in
+:mod:`ml.federated.parameter_aggregator` as ``ParameterAggregator``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping
-
-import numpy as np
-
-from ml.federated.client import ClientUpdate
-
-
-@dataclass
-class GlobalModelState:
-    theta: np.ndarray
-    round_num: int = 0
-    history: List[Dict[str, Any]] = field(default_factory=list)
-    velocity: np.ndarray | None = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "round":   self.round_num,
-            "theta":   self.theta.tolist(),
-            "history": self.history,
-        }
-
-
-def _stack(updates: Iterable[ClientUpdate]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    rows = list(updates)
-    if not rows:
-        raise ValueError("No client updates supplied to aggregator.")
-    thetas = np.stack([u.theta for u in rows])
-    n_samples = np.array([max(u.num_samples, 1) for u in rows], dtype=float)
-    losses = np.array([u.local_loss for u in rows], dtype=float)
-    return thetas, n_samples, losses
-
-
-def fedavg(updates: Iterable[ClientUpdate]) -> np.ndarray:
-    """Vanilla FedAvg: weighted average by sample count."""
-    thetas, n_samples, _ = _stack(updates)
-    weights = n_samples / n_samples.sum()
-    return (thetas * weights[:, None]).sum(axis=0)
-
-
-def weighted_fedavg(
-    updates: Iterable[ClientUpdate],
-    weights: Mapping[str, float],
-) -> np.ndarray:
-    """Aggregate using *external* per-client weights (e.g. fairness boosts,
-    FedAT staleness penalties)."""
-    rows = list(updates)
-    if not rows:
-        raise ValueError("No client updates supplied.")
-    thetas = np.stack([u.theta for u in rows])
-    raw = np.array([max(weights.get(u.hospital_id, 1.0), 1e-9) for u in rows], dtype=float)
-    raw /= raw.sum()
-    return (thetas * raw[:, None]).sum(axis=0)
-
-
-def fedavg_with_momentum(
-    updates: Iterable[ClientUpdate],
-    state: GlobalModelState,
-    momentum: float = 0.9,
-    lr: float = 1.0,
-) -> tuple[np.ndarray, np.ndarray]:
-    """FedAvgM (Hsu et al. 2019). Returns (theta_new, velocity_new)."""
-    thetas, n_samples, _ = _stack(updates)
-    weights = n_samples / n_samples.sum()
-    delta = (thetas * weights[:, None]).sum(axis=0) - state.theta
-    velocity = state.velocity if state.velocity is not None else np.zeros_like(state.theta)
-    velocity_new = momentum * velocity + delta
-    theta_new = state.theta + lr * velocity_new
-    return theta_new, velocity_new
+import json
+from typing import Any
 
 
 class FederatedAggregator:
-    """Stateful aggregator that supports multi-round runs with diagnostics."""
+    """Compute FedAvg over per-hospital weight dicts and persist the global model."""
 
-    def __init__(
-        self,
-        strategy: str = "fedavg",
-        external_weights: Mapping[str, float] | None = None,
-        momentum: float = 0.9,
-    ) -> None:
-        self.strategy = strategy
-        self.external_weights = external_weights
-        self.momentum = momentum
+    def __init__(self, s3_client=None, data_bucket: str = "") -> None:
+        self._s3 = s3_client
+        self._bucket = data_bucket
 
     def aggregate(
         self,
-        state: GlobalModelState,
-        updates: List[ClientUpdate],
-    ) -> GlobalModelState:
-        if self.strategy == "fedavg":
-            theta_new = fedavg(updates)
-            velocity_new = state.velocity
-        elif self.strategy == "weighted":
-            if not self.external_weights:
-                raise ValueError("weighted strategy requires external_weights")
-            theta_new = weighted_fedavg(updates, self.external_weights)
-            velocity_new = state.velocity
-        elif self.strategy == "fedavgm":
-            theta_new, velocity_new = fedavg_with_momentum(
-                updates, state, momentum=self.momentum
-            )
-        else:
-            raise ValueError(f"unknown FL strategy: {self.strategy}")
+        round_n: int,
+        weight_dicts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if not weight_dicts:
+            return {}
 
-        avg_loss = float(np.mean([u.local_loss for u in updates if np.isfinite(u.local_loss)]))
-        history_entry = {
-            "round":     state.round_num + 1,
-            "strategy":  self.strategy,
-            "n_clients": len(updates),
-            "avg_loss":  round(avg_loss, 4),
-            "delta_norm": float(np.linalg.norm(theta_new - state.theta)),
-            "participants": [u.hospital_id for u in updates],
-        }
-        return GlobalModelState(
-            theta=theta_new,
-            round_num=state.round_num + 1,
-            history=state.history + [history_entry],
-            velocity=velocity_new,
+        total_rows = sum(int(w["n_rows"]) for w in weight_dicts)
+        if total_rows == 0:
+            return {}
+
+        global_last_value = sum(
+            float(w["last_value"]) * (int(w["n_rows"]) / total_rows)
+            for w in weight_dicts
         )
 
+        model_type_rows: dict[str, int] = {}
+        for w in weight_dicts:
+            mn = w["model_name"]
+            model_type_rows[mn] = model_type_rows.get(mn, 0) + int(w["n_rows"])
+        dominant_model = max(model_type_rows, key=lambda k: model_type_rows[k])
 
-__all__ = [
-    "GlobalModelState",
-    "fedavg",
-    "weighted_fedavg",
-    "fedavg_with_momentum",
-    "FederatedAggregator",
-]
+        global_model: dict[str, Any] = {
+            "round":             round_n,
+            "num_clients":       len(weight_dicts),
+            "global_last_value": global_last_value,
+            "dominant_model":    dominant_model,
+            "total_rows":        total_rows,
+        }
+
+        if self._bucket and self._s3:
+            self._s3.put_object(
+                Bucket=self._bucket,
+                Key="fl/global_model.json",
+                Body=json.dumps(global_model).encode(),
+            )
+
+        return global_model
+
+
+__all__ = ["FederatedAggregator"]
