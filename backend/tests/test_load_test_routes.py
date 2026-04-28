@@ -22,8 +22,8 @@ def test_load_test_latest_returns_hospital_breakdown(tmp_path, monkeypatch):
     mlflow.set_tracking_uri(str(tmp_path / "mlruns"))
     mlflow.set_experiment("hospital-load-test")
     with mlflow.start_run():
-        mlflow.log_metrics({"H001_p95_ms": 120.0, "H001_failure_rate": 0.01,
-                             "H001_p50_ms": 60.0, "H001_p99_ms": 200.0, "H001_rps": 2.5,
+        mlflow.log_metrics({"010001_p95_ms": 120.0, "010001_failure_rate": 0.01,
+                             "010001_p50_ms": 60.0, "010001_p99_ms": 200.0, "010001_rps": 2.5,
                              "overall_p95_ms": 120.0, "overall_failure_rate": 0.01,
                              "overall_rps": 2.5})
         mlflow.set_tags({"num_hospitals": "1", "run_duration_s": "30", "host": "test"})
@@ -33,7 +33,7 @@ def test_load_test_latest_returns_hospital_breakdown(tmp_path, monkeypatch):
     body = response.json()
     assert "hospitals" in body
     assert len(body["hospitals"]) == 1
-    assert body["hospitals"][0]["hospital_id"] == "H001"
+    assert body["hospitals"][0]["hospital_id"] == "010001"
     assert body["hospitals"][0]["p95_ms"] == 120.0
 
 
