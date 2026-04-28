@@ -12,10 +12,19 @@ A full-stack system for predicting short-term ICU capacity risk and surfacing it
 frontend/          React + Vite — Dashboard, Analytics, Alerts, Settings
 backend/           FastAPI + SQLAlchemy — REST API, risk logic, forecast service
 lambdas/forecast/  AWS Lambda — serverless forecast handler (moto-tested)
+lambdas/ingest/    AWS Lambda — Great-Expectations validated ingestion
+lambdas/api/       AWS Lambda — Mangum + FastAPI read API for the dashboard
 ml/                Baseline, SARIMA, Prophet — training, evaluation, inference
+ml/model_selection ParallelBestModelSelector  — data-parallel candidate fitting (L3)
+ml/pipelines/      StagedPipeline / AutoPipelineOptimizer / multiproc inference (L3)
+ml/per_hospital/   PerHospitalTuner — non-IID hyperparameter search (L4)
+ml/federated/      FederatedClient / Aggregator / FedATCoordinator (L4)
+shared/            hospital_tiers / priority_queue / workload_metrics (L1 + L2)
 tests/             pytest suite — unit, moto integration, benchmark, CI coverage
 tests/load/        Locust load test + MLflow reporter
-scripts/           benchmark_models.py, run_training.py, seed_s3.py
+scripts/           benchmark_models.py, run_training.py, seed_s3.py,
+                   simulate_cluster.py (L2), run_federated.py (L4),
+                   benchmark_pipelines.py (L3 auto-opt)
 ```
 
 ---
@@ -138,18 +147,79 @@ The event loop stays free to serve snapshot and alert reads while inference runs
 ### Test Suite
 
 ```
-tests/test_forecast_utils.py       11 tests — breach_prob, risk_label, mc_ci (pure math)
-tests/test_forecast_handler.py      5 tests — Lambda handler via moto (DynamoDB + S3 mocked)
-tests/test_benchmark_smoke.py       3 tests — benchmark script returns valid RMSE/MAE
-tests/test_forecast_ci_coverage.py  2 tests — MC CI achieves ≥90% coverage (Gaussian + uniform noise)
-tests/test_ingest_handler.py        ingestion Lambda tests
-tests/test_ingest_validation.py     data validation suite
+tests/test_forecast_utils.py                11 tests — breach_prob, risk_label, mc_ci (pure math)
+tests/test_forecast_handler.py               5 tests — Lambda handler via moto (DynamoDB + S3 mocked)
+tests/test_forecast_handler_extensions.py    4 tests — batch / priority / fallback / metadata
+tests/test_benchmark_smoke.py                3 tests — benchmark script returns valid RMSE/MAE
+tests/test_forecast_ci_coverage.py           2 tests — MC CI achieves ≥90% coverage
+tests/test_ingest_handler.py                 6 tests — ingestion Lambda
+tests/test_ingest_validation.py             13 tests — data validation suite
+tests/test_hospital_tiers.py                14 tests — workload + TiFL tier classifiers
+tests/test_priority_queue.py                 5 tests — Borg-style scheduler + LPT packing
+tests/test_workload_metrics.py               4 tests — CPU/IO/comm profiler
+tests/test_parallel_selector.py              6 tests — parallel selector + staged pipeline + auto-opt
+tests/test_per_hospital_tuner.py             3 tests — per-hospital hyperparameter tuner
+tests/test_federated.py                      8 tests — FedAvg / weighted / FedAvgM / FedAT / TiFL
 ```
 
-All 21 phase-3 tests pass:
+All 83 tests pass (3 environment-conditional benchmarks skipped when Prophet/SARIMA fits exceed CI budget).
+
+---
+
+## Distributed-systems extensions (Lectures 1–4)
+
+The platform implements four research patterns from the cloud / distributed-ML / federated-learning literature on top of the same forecast service. Every feature has unit tests and is exercised by either the production handler or a CLI demo.
+
+### Lecture 1 — Cloud Resource Management (MOS-style)
+
+| Feature | Where |
+|---|---|
+| Workload-aware micro-services (ingest = I/O, forecast = CPU, API = latency) | `template.yaml` per-function `Tags`/`Environment` |
+| Dynamic Lambda sizing per hospital tier (memory + timeout + MC samples) | `Mappings.WorkloadTierMap` + `!FindInMap` in `template.yaml`; `shared/hospital_tiers.py` |
+| Hospital workload classification (small / medium / large) | `shared/hospital_tiers.py::classify_workload` |
+| Per-pipeline CPU vs I/O vs comm telemetry | `shared/workload_metrics.py::WorkloadProfiler` (emits `WallMs_Cpu`, `WallMs_Io`, `WallMs_Comm` to CloudWatch) |
+
+### Lecture 2 — Borg / Kubernetes
+
+| Feature | Where |
+|---|---|
+| Priority-based scheduling (high-risk hospitals first) | `shared/priority_queue.py::PriorityScheduler`, used by `lambdas/forecast/handler.py::_prioritise_hospitals` |
+| Batch forecasting (multi-hospital per Lambda invoke) | `lambdas/forecast/handler.py::lambda_handler` accepts `{"hospital_ids": [...]}` |
+| Retry + fallback to `BaselineForecaster` when SARIMA/Prophet fail | `lambdas/forecast/handler.py::_select_model_with_fallback` (emits `ModelFallbackUsed` metric) |
+| Request grouping + execution pooling (LPT bin-packing) | `shared/priority_queue.py::ExecutionPool` |
+| Multi-node cluster simulator | `python -m scripts.simulate_cluster --hospitals 20 --nodes 4 --rounds 3` |
+
+### Lecture 3 — Distributed ML (Alpa-style)
+
+| Feature | Where |
+|---|---|
+| Data parallelism across candidate models | `ml/model_selection/parallel_selector.py::ParallelBestModelSelector` (thread / process executors) |
+| Pipeline parallelism (load → clean → feature → train → predict) | `ml/pipelines/staged_pipeline.py::StagedPipeline` |
+| Inter-op + intra-op parallelism in one run | `StagedPipeline(enable_intra_op=True)` |
+| Communication-cost measurement (parquet round-trip bytes between stages) | `StageResult.bytes_in / bytes_out` |
+| Latency + bottleneck classification | `shared/workload_metrics.py::detect_bottleneck` |
+| GPU-ready / multi-process inference path | `ml/pipelines/multiproc_inference.py::predict_batch(backend="auto")` |
+| Auto-optimizer that benchmarks strategies and picks the fastest acceptable one | `ml/pipelines/auto_optimizer.py::AutoPipelineOptimizer`, CLI `python -m scripts.benchmark_pipelines` |
+
+### Lecture 4 — Federated Learning
+
+| Feature | Where |
+|---|---|
+| Per-hospital local trainer (no raw data leaves the client) | `ml/federated/client.py::FederatedClient` |
+| FedAvg / weighted FedAvg / FedAvgM aggregation strategies | `ml/federated/aggregator.py` |
+| TiFL tiering by data volume + variance | `shared/hospital_tiers.py::classify_tifl` (Tier 1 / 2 / 3) |
+| FedAT — async update cadence per tier (period 1 / 2 / 4) with staleness-decayed weights | `ml/federated/fedat.py::FedATCoordinator` |
+| Per-hospital hyperparameter tuning (non-IID baseline) | `ml/per_hospital/tuner.py::PerHospitalTuner` |
+| Async forecast cadence on AWS — mid-week refresh for Tier-2 hospitals | `template.yaml::ForecastFunction.Events.Tier2RefreshForecast` |
+| Weighted aggregation by `1 / occupancy_variance × num_samples` | `ClientUpdate.fl_weight` and `weighted_fedavg` |
+
+Run the federated simulation locally:
+
+```bash
+python -m scripts.run_federated --hospitals 8 --rounds 6 --strategy weighted --mlflow
 ```
-21 passed, 1 warning in 3.86s
-```
+
+The script logs per-round average loss, tier participation counts, FedAT staleness penalties, and per-hospital RMSE from the classical tuner — all of which can be picked up by MLflow when `--mlflow` is set.
 
 ---
 
