@@ -38,3 +38,6 @@ data/
 .claude/
 CLAUDE.md
 mlflow.db
+
+# Private keys
+*.pem
