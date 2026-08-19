@@ -93,7 +93,7 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="hospital_id" />
                   <YAxis unit=" ms" />
                   <Tooltip formatter={(v) => `${v} ms`} />
-                  <Bar dataKey="p95_ms" fill="#2563eb" name="p95 latency" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="p95_ms" fill="#2563eb" name="p95 latency" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
 
@@ -135,6 +135,7 @@ export default function AnalyticsPage() {
                     strokeWidth={2}
                     dot={{ r: 4 }}
                     name="Overall p95 (ms)"
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>

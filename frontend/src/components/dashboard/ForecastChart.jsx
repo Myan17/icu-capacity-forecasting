@@ -82,6 +82,7 @@ import {
                   stroke="none"
                   name="95% CI"
                   legendType="rect"
+                  isAnimationActive={false}
                 />
               )}
               <Line
@@ -91,6 +92,7 @@ import {
                 strokeWidth={2.5}
                 dot={{ r: 4, fill: "#2563eb" }}
                 name="Predicted"
+                isAnimationActive={false}
               />
             </ComposedChart>
           </ResponsiveContainer>
