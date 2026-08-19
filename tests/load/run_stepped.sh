@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-HOST="${HOST:-http://52.15.187.251:8000}"
+HOST="${HOST:-https://52-15-187-251.nip.io:8000}"
 RUN_TIME="${RUN_TIME:-120s}"
 USER_STEPS="${USER_STEPS:-10 20 30 50}"
 

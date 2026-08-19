@@ -103,7 +103,7 @@ USER_STEPS="20 50" RUN_TIME=60s ./tests/load/run_stepped.sh   # custom
 **Single run:**
 ```bash
 locust -f tests/load/locustfile.py \
-  --host http://52.15.187.251:8000 \
+  --host https://52-15-187-251.nip.io:8000 \
   --users 10 --spawn-rate 2 \
   --run-time 120s --headless \
   --csv reports/run_N
@@ -271,7 +271,18 @@ python scripts/benchmark_models.py
 
 ## Cloud Deployment
 
-- **EC2** hosts the FastAPI backend (`http://52.15.187.251:8000`)
+**Live dashboard:** https://myan17.github.io/icu-capacity-forecasting/
+**Live API:** https://52-15-187-251.nip.io:8000
+
+- **GitHub Pages** serves the React dashboard as a static build, published by
+  `.github/workflows/deploy-pages.yml` on every push to `myan`
+- **EC2** hosts the FastAPI backend, run by the `hospital-forecasting` systemd
+  unit as `uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 2`
+- **Caddy** terminates TLS on port 8000 and reverse-proxies to `127.0.0.1:8001`.
+  Pages is served over HTTPS, so a plain-HTTP API would be blocked as mixed
+  content; the certificate is issued by Let's Encrypt for the `nip.io` hostname
+  that resolves to the instance's public IP, which avoids having to register a
+  domain
 - **S3** stores trained model artifacts (`.pkl` files, keyed by hospital + model type)
 - **MLflow** uses a local SQLite backend (`mlflow.db`) for experiment tracking
 - **SQLite** (`app.db`) stores operational data: snapshots, forecasts, alerts
@@ -279,7 +290,13 @@ python scripts/benchmark_models.py
 To deploy backend changes to EC2:
 ```bash
 # EC2 terminal
-cd ~/hospital-forecasting
+cd ~/icu-capacity-forecasting
 git pull
 sudo systemctl restart hospital-forecasting
+```
+
+To check the backend and its TLS front:
+```bash
+sudo systemctl status hospital-forecasting caddy
+curl https://52-15-187-251.nip.io:8000/health
 ```
