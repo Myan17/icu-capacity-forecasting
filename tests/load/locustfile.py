@@ -6,7 +6,7 @@ each user owns exactly one hospital for the duration of the run.
 
 Usage:
     locust -f tests/load/locustfile.py \\
-      --host http://52.15.187.251:8000 \\
+      --host https://52-15-187-251.nip.io:8000 \\
       --users 10 --spawn-rate 1 \\
       --run-time 120s --headless \\
       --csv reports/run_$(date +%Y%m%d_%H%M%S)

@@ -103,7 +103,7 @@ export default function AnalyticsPage() {
             </>
           ) : (
             <p style={{ color: "#6b7280" }}>
-              No load test data yet. Run: <code>locust -f tests/load/locustfile.py --host http://52.15.187.251:8000 --users 5 --spawn-rate 1 --run-time 60s --headless</code>
+              No load test data yet. Run: <code>locust -f tests/load/locustfile.py --host https://52-15-187-251.nip.io:8000 --users 5 --spawn-rate 1 --run-time 60s --headless</code>
             </p>
           )
         )}
