@@ -26,9 +26,10 @@ os.environ.setdefault("ALERTS_TABLE",    ALERTS_TABLE)
 os.environ.setdefault("DATA_BUCKET",     DATA_BUCKET)
 os.environ.setdefault("POWERTOOLS_SERVICE_NAME", "test")
 os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "TestNS")
-os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
+os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+os.environ["AWS_SESSION_TOKEN"] = "testing"
 
 from lambdas.ingest.handler import lambda_handler  # noqa: E402
 

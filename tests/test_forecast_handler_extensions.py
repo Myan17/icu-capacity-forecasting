@@ -24,9 +24,10 @@ DATA_BUCKET     = os.environ.setdefault("DATA_BUCKET",     "test-data-bucket")
 os.environ.setdefault("POWERTOOLS_SERVICE_NAME",      "test")
 os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "TestNS")
 os.environ.setdefault("POWERTOOLS_TRACE_DISABLED",    "true")
-os.environ.setdefault("AWS_DEFAULT_REGION",           "us-east-1")
-os.environ.setdefault("AWS_ACCESS_KEY_ID",            "testing")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY",        "testing")
+os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+os.environ["AWS_SESSION_TOKEN"] = "testing"
 os.environ.setdefault("ALERT_OCCUPANCY_YELLOW",       "0.75")
 os.environ.setdefault("ALERT_OCCUPANCY_RED",          "0.90")
 os.environ.setdefault("BREACH_PROB_THRESHOLD",        "0.60")
