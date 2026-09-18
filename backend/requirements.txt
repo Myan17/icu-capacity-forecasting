@@ -11,4 +11,8 @@ scikit-learn
 statsmodels
 apscheduler
 python-multipart
-mlflow
+# mlflow 3.13 put the filesystem tracking store (./mlruns, which this
+# backend reads) into maintenance mode and raises MlflowException on use.
+# Pinned below it until the store is migrated with `mlflow migrate-filestore`
+# to a database backend such as sqlite:///mlflow.db.
+mlflow>=3.10,<3.13
